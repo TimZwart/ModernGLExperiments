@@ -35,14 +35,16 @@ class BasicWindow(mglw.WindowConfig):
             -0.6, -0.6,  1.0, 0.0, 0.0,
              0.6, -0.6,  0.0, 1.0, 0.0,
              0.0,  0.6,  0.0, 0.0, 1.0,
-             0.9,  0.9,  0.5, 0.5, 0.0
+             0.0,  0.6,  0.0, 0.0, 1.0,
+             0.9,  0.9,  0.5, 0.5, 0.0,
+             0.6, -0.6,  0.0, 1.0, 0.0
         ])
         self.vbo = self.ctx.buffer(vertices.tobytes())
         self.vao = self.ctx.simple_vertex_array(self.prog, self.vbo, 'in_vert', 'in_color')
 
     def render(self, time, frame_time):
         self.ctx.clear(0.2, 0.3, 0.3)
-        self.vao.render()
+        self.vao.render(moderngl.TRIANGLES, 6)
 
 if __name__ == '__main__':
     mglw.run_window_config(BasicWindow)
