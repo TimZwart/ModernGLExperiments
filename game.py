@@ -1,16 +1,14 @@
 import moderngl
-import moderngl_window as mglw
+import pygame
 import numpy as np
 from pyrr import Matrix44
 
-class BasicWindow(mglw.WindowConfig):
-    gl_version = (3, 3)
-    window_size = (800, 600)
-    title = "ModernGL 3D Setup"
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
+class Game:
+    def __init__(self, width, height):
+        pygame.init()
+        pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
+        self.ctx = moderngl.create_context()
+        
         self.prog = self.ctx.program(
             vertex_shader='''
                 #version 330
@@ -45,25 +43,38 @@ class BasicWindow(mglw.WindowConfig):
         self.vbo = self.ctx.buffer(vertices)
         self.vao = self.ctx.simple_vertex_array(self.prog, self.vbo, 'in_vert', 'in_color')
 
-        # Create and set up the MVP matrix
         self.mvp = self.prog['mvp']
-        self.mvp.write(self.get_mvp_matrix())
+        
+        self.width = width
+        self.height = height
 
-    def get_mvp_matrix(self):
-        proj = Matrix44.perspective_projection(45.0, self.aspect_ratio, 0.1, 100.0)
+    def get_mvp_matrix(self, time):
+        proj = Matrix44.perspective_projection(45.0, self.width / self.height, 0.1, 100.0)
         view = Matrix44.look_at(
             (4, 3, 2),  # eye
             (0, 0, 0),  # target
             (0, 1, 0),  # up
         )
-        import time
-        model = Matrix44.from_eulers((0, time.time() * 0.5, 0))
+        model = Matrix44.from_eulers((0, time * 0.5, 0))
         return (proj * view * model).astype('f4')
 
-    def render(self, time, frame_time):
+    def render(self):
         self.ctx.clear(0.2, 0.3, 0.3)
-        self.mvp.write(self.get_mvp_matrix())
+        self.mvp.write(self.get_mvp_matrix(pygame.time.get_ticks() * 0.001))
         self.vao.render(moderngl.TRIANGLE_STRIP)
+        pygame.display.flip()
+
+    def run(self):
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+            
+            self.render()
+        
+        pygame.quit()
 
 if __name__ == '__main__':
-    mglw.run_window_config(BasicWindow)
+    game = Game(800, 600)
+    game.run()
