@@ -2,9 +2,10 @@ import moderngl
 import pygame
 import numpy as np
 from pyrr import Matrix44
+import sys
 
 class Game:
-    def __init__(self, width, height):
+    def __init__(self, width, height, vertex_file=None):
         pygame.init()
         pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
         self.ctx = moderngl.create_context()
@@ -31,14 +32,17 @@ class Game:
             '''
         )
 
-        # Define vertices in 3D space
-        vertices = np.array([
-            # x, y, z, r, g, b
-            -1.0, -1.0, -1.0, 1.0, 0.0, 0.0,  # red
-             1.0, -1.0, -1.0, 0.0, 1.0, 0.0,  # green
-             0.0,  1.0, -1.0, 0.0, 0.0, 1.0,  # blue
-             0.0,  0.0,  1.0, 1.0, 1.0, 1.0,  # white
-        ], dtype='f4')
+        # Load vertices from file if provided, otherwise use default
+        if vertex_file:
+            vertices = self.load_vertices_from_file(vertex_file)
+        else:
+            vertices = np.array([
+                # x, y, z, r, g, b
+                -1.0, -1.0, -1.0, 1.0, 0.0, 0.0,
+                 1.0, -1.0, -1.0, 0.0, 1.0, 0.0,
+                 0.0,  1.0, -1.0, 0.0, 0.0, 1.0,
+                 0.0,  0.0,  1.0, 1.0, 1.0, 1.0,
+            ], dtype='f4')
 
         self.vbo = self.ctx.buffer(vertices)
         self.vao = self.ctx.simple_vertex_array(self.prog, self.vbo, 'in_vert', 'in_color')
@@ -47,6 +51,18 @@ class Game:
         
         self.width = width
         self.height = height
+
+    def load_vertices_from_file(self, filename):
+        vertices = []
+        with open(filename, 'r') as file:
+            for line in file:
+                # Assuming each line has 6 values: x, y, z, r, g, b
+                values = list(map(float, line.strip().split()))
+                if len(values) == 6:
+                    vertices.extend(values)
+                else:
+                    print(f"Warning: Skipping invalid line in {filename}: {line.strip()}")
+        return np.array(vertices, dtype='f4')
 
     def get_mvp_matrix(self, time):
         proj = Matrix44.perspective_projection(45.0, self.width / self.height, 0.1, 100.0)
@@ -76,5 +92,9 @@ class Game:
         pygame.quit()
 
 if __name__ == '__main__':
-    game = Game(800, 600)
+    width, height = 800, 600
+    vertex_file = None
+    if len(sys.argv) > 1:
+        vertex_file = sys.argv[1]
+    game = Game(width, height, vertex_file)
     game.run()
