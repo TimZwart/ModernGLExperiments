@@ -8,12 +8,12 @@
             "name": "Python Debugger: Current File",
             "type": "debugpy",
             "request": "launch",
-            "program": "game.py",
+            "program": "${workspaceFolder}/src/game.py",
             "console": "integratedTerminal",
             "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
             "justMyCode": true,
             "env": {
-                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ArcadeRTS/build/lib.win-amd64-cpython-312"
+                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
             },
             "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe"
         },
@@ -21,11 +21,14 @@
             "name": "Python: Launch game.py with scout.vertices",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/game.py",
+            "program": "${workspaceFolder}/src/game.py",
             "args": ["assets/scout.vertices"],
             "console": "integratedTerminal",
             "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
-            "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe"
+            "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe",
+            "env": {
+                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
+            },
         }
     ]
 }

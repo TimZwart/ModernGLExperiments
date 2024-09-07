@@ -3,6 +3,7 @@ import pygame
 import numpy as np
 from pyrr import Matrix44
 import sys
+from src.configuration.loadconfig import rotate_object
 
 class Game:
     def __init__(self, width, height, vertex_file=None):
@@ -71,8 +72,12 @@ class Game:
             (0, 0, 0),  # target
             (0, 1, 0),  # up
         )
-        model = Matrix44.from_eulers((0, time * 0.5, 0))
-        return (proj * view * model).astype('f4')
+        if rotate_object:
+            model = Matrix44.from_eulers((0, time * 0.5, 0))
+            final_matrix = proj * view * model
+        else:
+            final_matrix = proj * view
+        return (final_matrix).astype('f4')
 
     def render(self):
         self.ctx.clear(0.2, 0.3, 0.3)
