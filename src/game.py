@@ -43,7 +43,7 @@ class Game:
                 pygame.draw.rect(self.overlay, (255, 255, 0), self.edit_rect, 2)
             else:
                 selected_text = font.render(f"Selected Vertex: {selected_coords}", True, (255, 255, 0))
-            self.overlay.blit(selected_text, (10, self.height - 40))
+            self.overlay.blit(selected_text, (10, self.height - 50))
             
             # Create editable area
             edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
@@ -68,14 +68,15 @@ class Game:
             new_coords = eval(self.edit_text)
             if isinstance(new_coords, (list, tuple)) and len(new_coords) == 3:
                 verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3] = new_coords
+                print(f"New vertex coordinates set to: {new_coords}")
                 self.edit_mode = False
                 self.renderer.update_vertex_buffer()
         except:
             print("Invalid input. Please enter coordinates as [x, y, z]")
+            raise
 
     def run(self):
         running = True
-        frame_count = 0
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -100,9 +101,6 @@ class Game:
                             self.edit_text += event.unicode
             
             self.render()
-            frame_count += 1
-            if frame_count % 60 == 0:  # Print every 60 frames
-                print(f"Rendered {frame_count} frames")
         pygame.quit()
 
 if __name__ == '__main__':
