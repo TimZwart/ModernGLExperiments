@@ -94,7 +94,6 @@ class Renderer3D:
             print("Text texture or VAO is None, skipping text render")
             return
 
-        print("Rendering text texture")
         self.ctx.enable(moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         self.ctx.blend_equation = moderngl.FUNC_ADD
@@ -124,6 +123,16 @@ class Renderer3D:
         self.mvp.write(self.get_mvp_matrix(pygame.time.get_ticks() * 0.001))
         self.vao.render(moderngl.TRIANGLE_STRIP)
         self.render_text_texture()
+
+    def world_to_screen(self, world_coords):
+        mvp = self.get_mvp_matrix(pygame.time.get_ticks() * 0.001)
+        clip_coords = np.dot(np.column_stack((world_coords, np.ones(world_coords.shape[0]))), mvp.T)
+        ndc_coords = clip_coords[:, :3] / clip_coords[:, 3:]
+        screen_coords = (ndc_coords[:, :2] + 1) * 0.5 * np.array([self.width, self.height])
+        return screen_coords
+
+    def update_vertex_buffer(self):
+        self.vbo.write(verticesHolder.vertices)
 
 
 
