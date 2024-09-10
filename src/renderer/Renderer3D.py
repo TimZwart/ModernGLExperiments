@@ -1,5 +1,5 @@
 import numpy as np
-from moderngl import Context, TRIANGLE_STRIP
+from moderngl import Context, TRIANGLE_STRIP, TRIANGLES
 import pygame
 from pyrr import Matrix44
 
@@ -49,7 +49,7 @@ class Renderer3D:
         return screen_coords
     def render3D(self):
         self.mvp.write(self.get_mvp_matrix(pygame.time.get_ticks() * 0.001))
-        self.vao.render(TRIANGLE_STRIP)
+        self.vao.render(TRIANGLES)
         if self.ctx.error != 'GL_NO_ERROR':
             print("OpenGL error:")
             print(self.ctx.error)

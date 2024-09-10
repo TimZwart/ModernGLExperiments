@@ -35,9 +35,9 @@ class UIOverlayCreator:
             self.overlay.blit(selected_text, (10, self.height - 50))
 
             # Create editable area
-            edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
-            pygame.draw.rect(self.overlay, (255, 255, 0), edit_rect, 2)
-            self.edit_rect = edit_rect
+            self.game.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
+            pygame.draw.rect(self.overlay, (255, 255, 0), self.game.edit_rect, 2)
+            self.edit_rect = self.game.edit_rect
 
             if self.game.edit_mode:
                 edit_surface = font.render(self.game.edit_text, True, (255, 255, 0))

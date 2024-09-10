@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "main.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/game.py",
+            "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal",
             "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
             "justMyCode": true,
@@ -21,7 +21,7 @@
             "name": "Python: Launch game.py with scout.vertices",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/game.py",
+            "program": "${workspaceFolder}/src/main.py",
             "args": ["assets/scout.vertices"],
             "console": "integratedTerminal",
             "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",

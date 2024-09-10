@@ -38,7 +38,7 @@ class Game:
         assert isinstance(y, float), "y must be float"
         assert isinstance(z, float), "z must be float"
         new_vertex = [x, y, z, 1.0, 1.0, 1.0]  # Default color: white
-        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex)
+        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
         self.renderer.renderer3D.update_vertex_buffer()
         print(f"New vertex added: {new_vertex[:3]}")
 
@@ -51,6 +51,8 @@ class Game:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left mouse button
                         x, y = event.pos
+                        if not self.edit_rect:
+                            print("no edit rect, weird")
                         if self.edit_rect and self.edit_rect.collidepoint(x, y):
                             self.edit_mode = True
                             self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
