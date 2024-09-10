@@ -1,14 +1,13 @@
 import sys
 import pygame
-from src.renderer.Renderer3D import Renderer3D
-from src.geometry.loader import load_vertices
 from src.geometry.VerticesHolder import verticesHolder
 import numpy as np
 
+
 class Game:
-    def __init__(self, renderer: Renderer3D):
-        self.renderer = renderer
-        self.width, self.height = renderer.width, renderer.height
+    def __init__(self, width: int, height: int):
+        self.renderer = None #initialized later
+        self.width, self.height = width, height
         self.overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.selected_vertex = None  # Add this line
         self.edit_mode = False
@@ -17,51 +16,10 @@ class Game:
 
     def find_nearest_vertex(self, x, y):
         vertices = verticesHolder.vertices.reshape(-1, 6)
-        screen_coords = self.renderer.world_to_screen(vertices[:, :3])
+        screen_coords = self.renderer.renderer3D.world_to_screen(vertices[:, :3])
         distances = np.sqrt(np.sum((screen_coords - np.array([x, y])) ** 2, axis=1))
         nearest_index = np.argmin(distances)
         return nearest_index
-
-    def render(self):
-        # Clear the overlay
-        self.overlay.fill((0, 0, 0, 0))
-        
-        # Render text on the overlay
-        font = pygame.font.Font(None, 24)
-        debug_text = font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
-        self.overlay.blit(debug_text, (10, 10))
-        
-        vertices_text = [font.render(f"Vertex {i}: {verticesHolder.vertices[i*6:i*6+3]}", True, (255, 255, 255)) for i in range(min(20, len(verticesHolder.vertices) // 6))]
-        for i, text in enumerate(vertices_text):
-            self.overlay.blit(text, (10, 40 + i * 30))
-        
-        # Display selected vertex coordinates
-        if self.selected_vertex is not None:
-            selected_coords = verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]
-            if self.edit_mode:
-                selected_text = font.render(f"Edit Vertex: {self.edit_text}", True, (255, 255, 0))
-                pygame.draw.rect(self.overlay, (255, 255, 0), self.edit_rect, 2)
-            else:
-                selected_text = font.render(f"Selected Vertex: {selected_coords}", True, (255, 255, 0))
-            self.overlay.blit(selected_text, (10, self.height - 50))
-            
-            # Create editable area
-            edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
-            pygame.draw.rect(self.overlay, (255, 255, 0), edit_rect, 2)
-            self.edit_rect = edit_rect
-            
-            if self.edit_mode:
-                edit_surface = font.render(self.edit_text, True, (255, 255, 0))
-                self.overlay.blit(edit_surface, (15, self.height - 30))
-        
-        # Update the text texture
-        self.renderer.update_text_texture(self.overlay)
-        
-        # Render OpenGL content and text texture
-        self.renderer.render()
-        
-        # Update the display
-        pygame.display.flip()
 
     def apply_edit(self):
         try:
@@ -70,10 +28,19 @@ class Game:
                 verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3] = new_coords
                 print(f"New vertex coordinates set to: {new_coords}")
                 self.edit_mode = False
-                self.renderer.update_vertex_buffer()
+                self.renderer.renderer3D.update_vertex_buffer()
         except:
             print("Invalid input. Please enter coordinates as [x, y, z]")
             raise
+
+    def add_vertex(self, x:float, y:float, z:float):
+        assert isinstance(x, float), "x must be float"
+        assert isinstance(y, float), "y must be float"
+        assert isinstance(z, float), "z must be float"
+        new_vertex = [x, y, z, 1.0, 1.0, 1.0]  # Default color: white
+        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex)
+        self.renderer.renderer3D.update_vertex_buffer()
+        print(f"New vertex added: {new_vertex[:3]}")
 
     def run(self):
         running = True
@@ -92,7 +59,9 @@ class Game:
                             self.edit_mode = False
                             self.edit_text = ""
                 elif event.type == pygame.KEYDOWN:
-                    if self.edit_mode:
+                    if event.key == pygame.K_a:  # 'A' key to add a vertex
+                        self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
+                    elif self.edit_mode:
                         if event.key == pygame.K_RETURN:
                             self.apply_edit()
                         elif event.key == pygame.K_BACKSPACE:
@@ -100,18 +69,5 @@ class Game:
                         else:
                             self.edit_text += event.unicode
             
-            self.render()
+            self.renderer.render()
         pygame.quit()
-
-if __name__ == '__main__':
-    width, height = 800, 600
-    pygame.init()
-    pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
-    vertex_file = None
-    if len(sys.argv) > 1:
-        vertex_file = sys.argv[1]
-    verticesHolder.vertices = load_vertices(vertex_file)
-    renderer = Renderer3D(width, height)
-    game = Game(renderer)
-    game.run()
-
