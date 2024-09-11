@@ -42,6 +42,14 @@ class Game:
         self.renderer.renderer3D.update_vertex_buffer()
         print(f"New vertex added: {new_vertex[:3]}")
 
+    def save_vertices(self):
+        filename = "assets/scout.vertices"
+        vertices = verticesHolder.vertices.reshape(-1, 6)
+        with open(filename, 'w') as file:
+            for vertex in vertices:
+                file.write(f"{' '.join(map(str, vertex))}\n")
+        print(f"Vertices saved to {filename}")
+
     def run(self):
         running = True
         while running:
@@ -63,6 +71,8 @@ class Game:
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_a:  # 'A' key to add a vertex
                         self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
+                    elif event.key == pygame.K_s:  # 'S' key to save vertices
+                        self.save_vertices()
                     elif self.edit_mode:
                         if event.key == pygame.K_RETURN:
                             self.apply_edit()
