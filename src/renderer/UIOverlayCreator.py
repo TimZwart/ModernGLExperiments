@@ -18,7 +18,7 @@ class UIOverlayCreator:
         font = pygame.font.Font(None, 24)
         debug_text = font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
         self.overlay.blit(debug_text, (10, 10))
-        add_vertex_text = font.render("Press 'A' to add a new vertex at (0, 0, 0)  Press 'S' to save vertices to scout.vertices", True, (255, 255, 0))
+        add_vertex_text = font.render("Press 'P' to add a new vertex at (0, 0, 0)  Press 'O' to save vertices to scout.vertices", True, (255, 255, 0))
         self.overlay.blit(add_vertex_text, (10, self.height - 80))
         vertices_text = [font.render(f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}", True, (255, 255, 255))
                          for i in range(min(20, len(verticesHolder.vertices) // 6))]

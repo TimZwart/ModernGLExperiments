@@ -2,10 +2,11 @@ import sys
 import pygame
 from src.geometry.VerticesHolder import verticesHolder
 import numpy as np
+from src.camera.Camera import Camera
 
 
 class Game:
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: int, height: int, camera: Camera):
         self.renderer = None #initialized later
         self.width, self.height = width, height
         self.overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -13,7 +14,7 @@ class Game:
         self.edit_mode = False
         self.edit_text = ""
         self.edit_rect = None
-
+        self.camera = camera
     def find_nearest_vertex(self, x, y):
         vertices = verticesHolder.vertices.reshape(-1, 6)
         screen_coords = self.renderer.renderer3D.world_to_screen(vertices[:, :3])
@@ -69,15 +70,24 @@ class Game:
                             self.edit_mode = False
                             self.edit_text = ""
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_a:  # 'A' key to add a vertex
+                    if event.key == pygame.K_p:  # 'A' key to add a vertex
                         self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
-                    elif event.key == pygame.K_s:  # 'S' key to save vertices
+                    elif event.key == pygame.K_o:  # 'S' key to save vertices
                         self.save_vertices()
+                    elif event.key == pygame.K_w:
+                        self.camera.forward()
+                    elif event.key == pygame.K_s:
+                        self.camera.backward()
+                    elif event.key == pygame.K_a:
+                        self.camera.left()
+                    elif event.key == pygame.K_d:
+                        self.camera.right()
                     elif self.edit_mode:
                         if event.key == pygame.K_RETURN:
                             self.apply_edit()
                         elif event.key == pygame.K_BACKSPACE:
                             self.edit_text = self.edit_text[:-1]
+
                         else:
                             self.edit_text += event.unicode
             

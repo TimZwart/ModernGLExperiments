@@ -2,14 +2,15 @@ import moderngl
 from src.renderer.Renderer3D import Renderer3D
 from src.renderer.TextRenderer import TextRenderer
 import pygame
+from src.camera.Camera import Camera
 
 from src.renderer.UIOverlayCreator import UIOverlayCreator
 
 
 class Renderer:
-    def __init__(self, width, height, uiOverlayCreator: UIOverlayCreator):
+    def __init__(self, width, height, uiOverlayCreator: UIOverlayCreator, camera: Camera):
         self.ctx = moderngl.create_context()
-        self.renderer3D : Renderer3D = Renderer3D(self.ctx, width, height)
+        self.renderer3D : Renderer3D = Renderer3D(self.ctx, width, height, camera)
         self.uiOverlayCreator = uiOverlayCreator
         self.text_renderer : TextRenderer = TextRenderer(self.ctx)
 

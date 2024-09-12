@@ -5,10 +5,11 @@ from pyrr import Matrix44
 
 from src.configuration.loadconfig import rotate_object
 from src.geometry.VerticesHolder import verticesHolder
+from src.camera.Camera import Camera
 
 
 class Renderer3D:
-    def __init__(self, ctx:Context, width, height):
+    def __init__(self, ctx:Context, width, height, camera: Camera):
         self.prog = ctx.program(
         vertex_shader='''
             #version 330
@@ -37,6 +38,7 @@ class Renderer3D:
         self.mvp = self.prog['mvp']
         self.width = width
         self.height = height
+        self.camera = camera
 
     def update_vertex_buffer(self):
         self.vbo.write(verticesHolder.vertices)
@@ -58,9 +60,9 @@ class Renderer3D:
     def get_mvp_matrix(self, time):
         proj = Matrix44.perspective_projection(45.0, self.width / self.height, 0.1, 100.0)
         view = Matrix44.look_at(
-            (4, 3, 2),  # eye
-            (0, 0, 0),  # target
-            (0, 1, 0),  # up
+            self.camera.eye,  # eye
+            self.camera.look_at,  # target
+            self.camera.up,  # up
         )
         if rotate_object:
             model = Matrix44.from_eulers((0, time * 0.5, 0))
