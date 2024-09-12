@@ -26,12 +26,12 @@ class Camera:
         z-=1
         self.eye = (x, y, z)
 
-    def up(self):
+    def upwards(self):
         x, y, z = self.eye
         y+=1
         self.eye = (x, y, z)
 
-    def down(self):
+    def downwards(self):
         x, y, z = self.eye
         y-=1
         self.eye = (x, y, z)

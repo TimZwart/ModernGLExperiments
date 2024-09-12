@@ -14,10 +14,6 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         vertex_file = sys.argv[1]
     verticesHolder.vertices = load_vertices(vertex_file)
-    camera = Camera()
-    game = Game(width, height, camera)
-    uiOverlayCreator = UIOverlayCreator(width, height, game)
-    renderer = Renderer(width, height, uiOverlayCreator, camera)
-    game.renderer = renderer
+    game = Game(width, height)
     game.run()
 
