@@ -30,6 +30,8 @@ class Game:
                 print(f"New vertex coordinates set to: {new_coords}")
                 self.edit_mode = False
                 self.renderer.renderer3D.update_vertex_buffer()
+            else:
+                print(f"return pressed in edit mode, but input was not valid: {new_coords} has length {len(new_coords)} and type {type(new_coords)}")
         except:
             print("Invalid input. Please enter coordinates as [x, y, z]")
             raise
@@ -64,6 +66,7 @@ class Game:
                             print("no edit rect, weird")
                         if self.edit_rect and self.edit_rect.collidepoint(x, y):
                             self.edit_mode = True
+                            print("edit mode activated")
                             self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
                         else:
                             self.selected_vertex = self.find_nearest_vertex(x, y)
