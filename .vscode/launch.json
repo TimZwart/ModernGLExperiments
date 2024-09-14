@@ -29,6 +29,19 @@
             "env": {
                 "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
             },
+        },
+        {
+            "name": "Python: Test Matrix44 Multiplication",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "unittest",
+            "args": ["test.test_matrix44_multiplication"],
+            "console": "integratedTerminal",
+            "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
+            "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe",
+            "env": {
+                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
+            }
         }
     ]
 }

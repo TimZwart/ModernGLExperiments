@@ -22,23 +22,32 @@ class Game:
         vertices = verticesHolder.vertices.reshape(-1, 6)
         screen_coords = self.renderer.renderer3D.world_to_screen(vertices[:, :3])
         
-        # Calculate distances in screen space
+        print(f"Total vertices: {len(vertices)}")
+        print(f"Screen coordinates shape: {screen_coords.shape}")
+        
+        # Calculate distances for all vertices
         distances = np.sqrt(np.sum((screen_coords - np.array([x, y])) ** 2, axis=1))
         
         # Find the index of the nearest vertex
         nearest_index = np.argmin(distances)
-        
-        # Set a maximum distance threshold (e.g., 100 pixels)
-        max_distance = 100
         nearest_distance = distances[nearest_index]
         
-        print(f"Nearest vertex: {nearest_index}, distance: {nearest_distance:.2f}")
+        # Set a maximum distance threshold (e.g., 500 pixels)
+        max_distance = 500
+        
         print(f"Click position: ({x}, {y})")
+        print("Vertex positions:")
+        for i, (sx, sy) in enumerate(screen_coords):
+            print(f"Vertex {i}: ({sx:.2f}, {sy:.2f}), distance: {distances[i]:.2f}")
+        
         print(f"Nearest vertex screen position: ({screen_coords[nearest_index][0]:.2f}, {screen_coords[nearest_index][1]:.2f})")
+        print(f"Distance to nearest vertex: {nearest_distance:.2f}")
         
         if nearest_distance > max_distance:
             print(f"No vertex within {max_distance} pixels")
             return None
+        
+        print(f"Selected vertex index: {nearest_index}")
         
         return nearest_index
 
@@ -91,10 +100,14 @@ class Game:
                             print("edit mode activated")
                             self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
                         else:
-                            self.selected_vertex = self.find_nearest_vertex(x, y)
-                            print(f"selected vertex: {self.selected_vertex}")
-                            self.edit_mode = False
-                            self.edit_text = ""
+                            nearest_vertex = self.find_nearest_vertex(x, y)
+                            if nearest_vertex is not None:
+                                self.selected_vertex = self.find_nearest_vertex(x, y)
+                                print(f"selected vertex: {self.selected_vertex}")
+                                self.edit_mode = False
+                                self.edit_text = ""
+                            else:
+                                print("No vertex nearby")
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_p:  # 'A' key to add a vertex
                         self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
