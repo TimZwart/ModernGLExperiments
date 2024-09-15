@@ -3,6 +3,7 @@ import pygame
 from src.geometry.VerticesHolder import verticesHolder
 import numpy as np
 from src.camera.Camera import Camera
+import random
 
 class Game:
     def __init__(self, width: int, height: int):
@@ -17,6 +18,19 @@ class Game:
         self.uiOverlayCreator = UIOverlayCreator(width, height, self)
         from src.renderer.Renderer import Renderer
         self.renderer = Renderer(width, height, self.uiOverlayCreator, self.camera)
+        self.vertex_count = len(verticesHolder.vertices) // 6
+        if self.vertex_count > 0:
+            if self.vertex_count % 3 == 0:
+                self.current_color = self.random_color()
+            else:
+                last_vertex = verticesHolder.vertices[-6:]
+                self.current_color = last_vertex[3:6].tolist()
+        else:
+            self.current_color = self.random_color()
+        self.scroll_speed = 3  # Number of vertices to scroll per mouse wheel event
+
+    def random_color(self):
+        return [random.random() for _ in range(3)]
 
     def find_nearest_vertex(self, x, y):
         vertices = verticesHolder.vertices.reshape(-1, 6)
@@ -70,7 +84,11 @@ class Game:
         assert isinstance(x, float), "x must be float"
         assert isinstance(y, float), "y must be float"
         assert isinstance(z, float), "z must be float"
-        new_vertex = [x, y, z, 1.0, 1.0, 1.0]  # Default color: white
+        
+        if self.vertex_count % 3 == 0:
+            self.current_color = self.random_color()
+        
+        new_vertex = [x, y, z] + self.current_color
         verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
         self.renderer.renderer3D.update_vertex_buffer()
         print(f"New vertex added: {new_vertex[:3]}")
@@ -84,13 +102,21 @@ class Game:
         print(f"Vertices saved to {filename}")
 
     def handle_vertex_list_click(self, x, y):
-        for i, rect in enumerate(self.uiOverlayCreator.vertex_rects):
+        for actual_index, rect in self.uiOverlayCreator.vertex_rects:
             if rect.collidepoint(x, y):
-                self.selected_vertex = i
+                self.selected_vertex = actual_index
                 self.edit_mode = True
                 self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
                 return True
         return False
+
+    def handle_scroll(self, y):
+        total_vertices = len(verticesHolder.vertices) // 6
+        if y > 0:  # Scroll up
+            self.uiOverlayCreator.scroll_offset = max(0, self.uiOverlayCreator.scroll_offset - self.scroll_speed)
+        else:  # Scroll down
+            max_offset = max(0, total_vertices - self.uiOverlayCreator.max_visible_vertices)
+            self.uiOverlayCreator.scroll_offset = min(max_offset, self.uiOverlayCreator.scroll_offset + self.scroll_speed)
 
     def run(self):
         running = True
@@ -139,6 +165,8 @@ class Game:
 
                         else:
                             self.edit_text += event.unicode
+                elif event.type == pygame.MOUSEWHEEL:
+                    self.handle_scroll(event.y)
             
             self.renderer.render()
         pygame.quit()
