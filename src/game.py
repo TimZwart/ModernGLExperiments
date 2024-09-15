@@ -11,7 +11,7 @@ class Game:
         self.selected_vertex = None  # Add this line
         self.edit_mode = False
         self.edit_text = ""
-        self.edit_rect = None
+        self.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
         self.camera = Camera()
         from src.renderer.UIOverlayCreator import UIOverlayCreator
         self.uiOverlayCreator = UIOverlayCreator(width, height, self)
@@ -83,6 +83,15 @@ class Game:
                 file.write(f"{' '.join(map(str, vertex))}\n")
         print(f"Vertices saved to {filename}")
 
+    def handle_vertex_list_click(self, x, y):
+        for i, rect in enumerate(self.uiOverlayCreator.vertex_rects):
+            if rect.collidepoint(x, y):
+                self.selected_vertex = i
+                self.edit_mode = True
+                self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
+                return True
+        return False
+
     def run(self):
         running = True
         while running:
@@ -91,19 +100,16 @@ class Game:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left mouse button
-                        print("left mouse button pressed")
                         x, y = event.pos
-                        if not self.edit_rect:
-                            print("no edit rect, weird")
                         if self.edit_rect and self.edit_rect.collidepoint(x, y):
                             self.edit_mode = True
-                            print("edit mode activated")
                             self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
+                        elif self.handle_vertex_list_click(x, y):
+                            pass  # Vertex in the list was clicked, no need to do anything else
                         else:
                             nearest_vertex = self.find_nearest_vertex(x, y)
                             if nearest_vertex is not None:
-                                self.selected_vertex = self.find_nearest_vertex(x, y)
-                                print(f"selected vertex: {self.selected_vertex}")
+                                self.selected_vertex = nearest_vertex
                                 self.edit_mode = False
                                 self.edit_text = ""
                             else:
