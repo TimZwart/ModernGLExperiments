@@ -1,7 +1,7 @@
 import moderngl
 import pygame
 import numpy as np
-class TextRenderer:
+class OverlayRenderer:
     def __init__(self, ctx):
         self.ctx = ctx
         self.text_texture = None

@@ -1,5 +1,3 @@
-from pyrr import Matrix44
-
 class Camera:
     def __init__(self):
         self.eye = (4, 3, 2)

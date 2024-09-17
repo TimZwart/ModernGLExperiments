@@ -1,6 +1,6 @@
 import moderngl
 from src.renderer.Renderer3D import Renderer3D
-from src.renderer.TextRenderer import TextRenderer
+from src.renderer.OverlayRenderer import OverlayRenderer
 import pygame
 from src.camera.Camera import Camera
 
@@ -12,7 +12,7 @@ class Renderer:
         self.ctx = moderngl.create_context()
         self.renderer3D : Renderer3D = Renderer3D(self.ctx, width, height, camera)
         self.uiOverlayCreator = uiOverlayCreator
-        self.text_renderer : TextRenderer = TextRenderer(self.ctx)
+        self.text_renderer : OverlayRenderer = OverlayRenderer(self.ctx)
 
     def render(self):
         self.uiOverlayCreator.draw_ui_overlay()
