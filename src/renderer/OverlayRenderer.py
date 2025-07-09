@@ -42,7 +42,9 @@ class OverlayRenderer:
         self.ctx.disable(moderngl.BLEND)
 
     def update_text_texture(self, surface):
-        pygame.image.save(surface, "text_texture.png")
+        # DEBUG: Save the surface being used for the texture
+
+        #pygame.image.save(surface, "text_texture.png")
         if self.text_texture is None:
             self.text_texture = self.create_text_texture(surface)
         else:

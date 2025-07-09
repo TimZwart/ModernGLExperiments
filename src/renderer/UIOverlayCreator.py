@@ -25,7 +25,11 @@ class UIOverlayCreator:
         # Render text on the overlay
         debug_text = self.font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
         self.overlay.blit(debug_text, (10, 10))
-        add_vertex_text = self.font.render("Press 'P' to add a new vertex at (0, 0, 0)  Press 'O' to save vertices to scout.vertices", True, (255, 255, 0))
+        # Camera controls text
+        camera_controls_text = self.font.render("Camera: W/S=Forward/Back  A/D=Left/Right  Q/E=Up/Down", True, (0, 255, 255))
+        self.overlay.blit(camera_controls_text, (10, self.height - 110))
+        
+        add_vertex_text = self.font.render(f"Press 'P' to add vertex  'O' to save  'C' to change filename  Current: {self.game.filename_text}", True, (255, 255, 0))
         self.overlay.blit(add_vertex_text, (10, self.height - 80))
         
         # Create a clickable area for each vertex
@@ -47,6 +51,19 @@ class UIOverlayCreator:
             pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, 35), (20, 25), (30, 35)])
         if total_vertices > self.scroll_offset + self.max_visible_vertices:
             pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, self.height - 85), (20, self.height - 75), (30, self.height - 85)])
+
+        # Display filename editing area
+        if self.game.filename_edit_mode:
+            filename_text = self.font.render(f"Edit Filename: {self.game.filename_text}", True, (0, 255, 0))
+            self.overlay.blit(filename_text, (10, self.height - 170))
+            pygame.draw.rect(self.overlay, (0, 255, 0), self.game.filename_rect, 2)
+            filename_surface = self.font.render(self.game.filename_text, True, (0, 255, 0))
+            self.overlay.blit(filename_surface, (15, self.height - 135))
+        else:
+            # Show clickable filename area
+            filename_display = self.font.render(f"Save to: {self.game.filename_text} (click to edit)", True, (150, 150, 150))
+            self.overlay.blit(filename_display, (10, self.height - 170))
+            pygame.draw.rect(self.overlay, (100, 100, 100), self.game.filename_rect, 1)
 
         # Display selected vertex coordinates
         if self.game.selected_vertex is not None:

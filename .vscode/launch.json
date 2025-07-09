@@ -10,12 +10,12 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal",
-            "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
+            "cwd": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments",
             "justMyCode": true,
             "env": {
-                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
+                "PYTHONPATH": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments"
             },
-            "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe"
+            "python": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments/.venv/Scripts/python.exe"
         },
         {
             "name": "Python: Launch game.py with scout.vertices",
@@ -24,10 +24,10 @@
             "program": "${workspaceFolder}/src/main.py",
             "args": ["assets/scout.vertices"],
             "console": "integratedTerminal",
-            "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
-            "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe",
+            "cwd": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments",
+            "python": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments/.venv/Scripts/python.exe",
             "env": {
-                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
+                "PYTHONPATH": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments"
             },
         },
         {
@@ -37,10 +37,10 @@
             "module": "unittest",
             "args": ["test.test_matrix44_multiplication"],
             "console": "integratedTerminal",
-            "cwd": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments",
-            "python": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments/.venv/Scripts/python.exe",
+            "cwd": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments",
+            "python": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments/.venv/Scripts/python.exe",
             "env": {
-                "PYTHONPATH": "C:/Users/tzw23794/PycharmProjects/ModernGLExperiments"
+                "PYTHONPATH": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments"
             }
         }
     ]

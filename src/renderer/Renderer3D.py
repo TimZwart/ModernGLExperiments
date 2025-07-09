@@ -37,7 +37,7 @@ class Renderer3D:
 
     def world_to_screen(self, world_coords):
         mvp = self.get_mvp_matrix(pygame.time.get_ticks() * 0.001)
-        converter:WorldScreenSpaceConverter = WorldScreenSpaceConverter(mvp, self.width, self.height, mvp, world_coords, self.camera)
+        converter:WorldScreenSpaceConverter = WorldScreenSpaceConverter( self.width, self.height, mvp,  world_coords, self.camera)
         return converter.compute()
 
     def render3D(self):

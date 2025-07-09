@@ -13,6 +13,10 @@ class Game:
         self.edit_mode = False
         self.edit_text = ""
         self.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
+        # Filename editing variables
+        self.filename_edit_mode = False
+        self.filename_text = "assets/scout.vertices"
+        self.filename_rect = pygame.Rect(10, self.height - 140, 350, 30)
         self.camera = Camera()
         from src.renderer.UIOverlayCreator import UIOverlayCreator
         self.uiOverlayCreator = UIOverlayCreator(width, height, self)
@@ -94,12 +98,17 @@ class Game:
         print(f"New vertex added: {new_vertex[:3]}")
 
     def save_vertices(self):
-        filename = "assets/scout.vertices"
+        filename = self.filename_text
         vertices = verticesHolder.vertices.reshape(-1, 6)
         with open(filename, 'w') as file:
             for vertex in vertices:
                 file.write(f"{' '.join(map(str, vertex))}\n")
         print(f"Vertices saved to {filename}")
+
+    def apply_filename_edit(self):
+        # Simply exit filename edit mode - the filename_text is already updated
+        self.filename_edit_mode = False
+        print(f"Save filename set to: {self.filename_text}")
 
     def handle_vertex_list_click(self, x, y):
         for actual_index, rect in self.uiOverlayCreator.vertex_rects:
@@ -127,7 +136,9 @@ class Game:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left mouse button
                         x, y = event.pos
-                        if self.edit_rect and self.edit_rect.collidepoint(x, y):
+                        if self.filename_rect and self.filename_rect.collidepoint(x, y):
+                            self.filename_edit_mode = True
+                        elif self.edit_rect and self.edit_rect.collidepoint(x, y) and self.selected_vertex is not None:
                             self.edit_mode = True
                             self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
                         elif self.handle_vertex_list_click(x, y):
@@ -141,10 +152,26 @@ class Game:
                             else:
                                 print("No vertex nearby")
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_p:  # 'A' key to add a vertex
+                    if self.filename_edit_mode:
+                        if event.key == pygame.K_RETURN:
+                            self.apply_filename_edit()
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.filename_text = self.filename_text[:-1]
+                        else:
+                            self.filename_text += event.unicode
+                    elif self.edit_mode:
+                        if event.key == pygame.K_RETURN:
+                            self.apply_edit()
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.edit_text = self.edit_text[:-1]
+                        else:
+                            self.edit_text += event.unicode
+                    elif event.key == pygame.K_p:  # 'P' key to add a vertex
                         self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
-                    elif event.key == pygame.K_o:  # 'S' key to save vertices
+                    elif event.key == pygame.K_o:  # 'O' key to save vertices
                         self.save_vertices()
+                    elif event.key == pygame.K_c:  # 'C' key to change filename
+                        self.filename_edit_mode = True
                     elif event.key == pygame.K_w:
                         self.camera.forward()
                     elif event.key == pygame.K_s:
@@ -157,14 +184,6 @@ class Game:
                         self.camera.upwards()
                     elif event.key == pygame.K_e:
                         self.camera.downwards()
-                    elif self.edit_mode:
-                        if event.key == pygame.K_RETURN:
-                            self.apply_edit()
-                        elif event.key == pygame.K_BACKSPACE:
-                            self.edit_text = self.edit_text[:-1]
-
-                        else:
-                            self.edit_text += event.unicode
                 elif event.type == pygame.MOUSEWHEEL:
                     self.handle_scroll(event.y)
             
