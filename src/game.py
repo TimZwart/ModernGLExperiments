@@ -33,6 +33,9 @@ class Game:
             self.current_color = self.random_color()
         self.scroll_speed = 3  # Number of vertices to scroll per mouse wheel event
 
+        from src.event_handler import EventHandler
+        self.event_handler = EventHandler(self)
+
     def random_color(self):
         return [random.random() for _ in range(3)]
 
@@ -130,62 +133,6 @@ class Game:
     def run(self):
         running = True
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Left mouse button
-                        x, y = event.pos
-                        if self.filename_rect and self.filename_rect.collidepoint(x, y):
-                            self.filename_edit_mode = True
-                        elif self.edit_rect and self.edit_rect.collidepoint(x, y) and self.selected_vertex is not None:
-                            self.edit_mode = True
-                            self.edit_text = f"{verticesHolder.vertices[self.selected_vertex*6:self.selected_vertex*6+3]}"
-                        elif self.handle_vertex_list_click(x, y):
-                            pass  # Vertex in the list was clicked, no need to do anything else
-                        else:
-                            nearest_vertex = self.find_nearest_vertex(x, y)
-                            if nearest_vertex is not None:
-                                self.selected_vertex = nearest_vertex
-                                self.edit_mode = False
-                                self.edit_text = ""
-                            else:
-                                print("No vertex nearby")
-                elif event.type == pygame.KEYDOWN:
-                    if self.filename_edit_mode:
-                        if event.key == pygame.K_RETURN:
-                            self.apply_filename_edit()
-                        elif event.key == pygame.K_BACKSPACE:
-                            self.filename_text = self.filename_text[:-1]
-                        else:
-                            self.filename_text += event.unicode
-                    elif self.edit_mode:
-                        if event.key == pygame.K_RETURN:
-                            self.apply_edit()
-                        elif event.key == pygame.K_BACKSPACE:
-                            self.edit_text = self.edit_text[:-1]
-                        else:
-                            self.edit_text += event.unicode
-                    elif event.key == pygame.K_p:  # 'P' key to add a vertex
-                        self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
-                    elif event.key == pygame.K_o:  # 'O' key to save vertices
-                        self.save_vertices()
-                    elif event.key == pygame.K_c:  # 'C' key to change filename
-                        self.filename_edit_mode = True
-                    elif event.key == pygame.K_w:
-                        self.camera.forward()
-                    elif event.key == pygame.K_s:
-                        self.camera.backward()
-                    elif event.key == pygame.K_a:
-                        self.camera.left()
-                    elif event.key == pygame.K_d:
-                        self.camera.right()
-                    elif event.key == pygame.K_q:
-                        self.camera.upwards()
-                    elif event.key == pygame.K_e:
-                        self.camera.downwards()
-                elif event.type == pygame.MOUSEWHEEL:
-                    self.handle_scroll(event.y)
-            
+            running = self.event_handler.handle_events()
             self.renderer.render()
         pygame.quit()
