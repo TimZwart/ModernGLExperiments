@@ -22,9 +22,9 @@ class Game:
         self.uiOverlayCreator = UIOverlayCreator(width, height, self)
         from src.renderer.Renderer import Renderer
         self.renderer = Renderer(width, height, self.uiOverlayCreator, self.camera)
-        self.vertex_count = len(verticesHolder.vertices) // 6
-        if self.vertex_count > 0:
-            if self.vertex_count % 3 == 0:
+        initial_count = len(verticesHolder.vertices) // 6
+        if initial_count > 0:
+            if initial_count % 3 == 0:
                 self.current_color = self.random_color()
             else:
                 last_vertex = verticesHolder.vertices[-6:]
