@@ -4,10 +4,12 @@ from src.geometry.VerticesHolder import verticesHolder
 import numpy as np
 from src.camera.Camera import Camera
 import random
+from src.configuration.loadconfig import relative_movement
 
 class Game:
     def __init__(self, width: int, height: int):
         self.width, self.height = width, height
+        self.relative_movement = relative_movement
         self.overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.selected_vertex = None  # Add this line
         self.edit_mode = False

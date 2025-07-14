@@ -13,6 +13,7 @@ if not_initialized:
     init()
     not_initialized = False
 def get_boolean_config(key):
-    return config['GAME'][key] == 'yes'
+    return config['GAME'].getboolean(key)
 
 rotate_object = get_boolean_config('rotate_object')
+relative_movement = get_boolean_config('relative_movement')

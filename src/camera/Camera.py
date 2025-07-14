@@ -76,3 +76,41 @@ class Camera:
         new_dir = self.rotate_vector(dir, right, angle)
         self.look_at = tuple(np.array(self.eye) + new_dir)
 
+    def relative_forward(self, speed=1):
+        dir = np.array(self.look_at) - np.array(self.eye)
+        dir = dir / np.linalg.norm(dir)
+        self.eye = tuple(np.array(self.eye) + dir * speed)
+        self.look_at = tuple(np.array(self.look_at) + dir * speed)
+
+    def relative_backward(self, speed=1):
+        dir = np.array(self.look_at) - np.array(self.eye)
+        dir = dir / np.linalg.norm(dir)
+        self.eye = tuple(np.array(self.eye) - dir * speed)
+        self.look_at = tuple(np.array(self.look_at) - dir * speed)
+
+    def relative_right(self, speed=1):
+        dir = np.array(self.look_at) - np.array(self.eye)
+        dir = dir / np.linalg.norm(dir)
+        right = np.cross(dir, np.array(self.up))
+        right = right / np.linalg.norm(right)
+        self.eye = tuple(np.array(self.eye) + right * speed)
+        self.look_at = tuple(np.array(self.look_at) + right * speed)
+
+    def relative_left(self, speed=1):
+        dir = np.array(self.look_at) - np.array(self.eye)
+        dir = dir / np.linalg.norm(dir)
+        right = np.cross(dir, np.array(self.up))
+        right = right / np.linalg.norm(right)
+        self.eye = tuple(np.array(self.eye) - right * speed)
+        self.look_at = tuple(np.array(self.look_at) - right * speed)
+
+    def relative_upwards(self, speed=1):
+        up = np.array(self.up) / np.linalg.norm(self.up)
+        self.eye = tuple(np.array(self.eye) + up * speed)
+        self.look_at = tuple(np.array(self.look_at) + up * speed)
+
+    def relative_downwards(self, speed=1):
+        up = np.array(self.up) / np.linalg.norm(self.up)
+        self.eye = tuple(np.array(self.eye) - up * speed)
+        self.look_at = tuple(np.array(self.look_at) - up * speed)
+

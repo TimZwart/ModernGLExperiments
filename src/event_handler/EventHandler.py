@@ -66,17 +66,35 @@ class EventHandler:
                 elif event.key == pygame.K_c:  # 'C' key to change filename
                     self.game.filename_edit_mode = True
                 elif event.key == pygame.K_w:
-                    self.game.camera.forward()
+                    if self.game.relative_movement:
+                        self.game.camera.relative_forward()
+                    else:
+                        self.game.camera.forward()
                 elif event.key == pygame.K_s:
-                    self.game.camera.backward()
+                    if self.game.relative_movement:
+                        self.game.camera.relative_backward()
+                    else:
+                        self.game.camera.backward()
                 elif event.key == pygame.K_a:
-                    self.game.camera.left()
+                    if self.game.relative_movement:
+                        self.game.camera.relative_left()
+                    else:
+                        self.game.camera.left()
                 elif event.key == pygame.K_d:
-                    self.game.camera.right()
+                    if self.game.relative_movement:
+                        self.game.camera.relative_right()
+                    else:
+                        self.game.camera.right()
                 elif event.key == pygame.K_q:
-                    self.game.camera.upwards()
+                    if self.game.relative_movement:
+                        self.game.camera.relative_upwards()
+                    else:
+                        self.game.camera.upwards()
                 elif event.key == pygame.K_e:
-                    self.game.camera.downwards()
+                    if self.game.relative_movement:
+                        self.game.camera.relative_downwards()
+                    else:
+                        self.game.camera.downwards()
             elif event.type == pygame.MOUSEWHEEL:
                 self.handle_scroll(event.y)
         
