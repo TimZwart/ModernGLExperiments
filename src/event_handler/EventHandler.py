@@ -6,6 +6,7 @@ import numpy as np
 class EventHandler:
     def __init__(self, game):
         self.game = game
+        self.middle_mouse_pressed = False
 
     def handle_events(self):
         continue_running = True
@@ -30,6 +31,19 @@ class EventHandler:
                             self.game.edit_text = ""
                         else:
                             print("No vertex nearby")
+                elif event.button == 2:  # Middle mouse button
+                    self.middle_mouse_pressed = True
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 2:
+                    self.middle_mouse_pressed = False
+
+            elif event.type == pygame.MOUSEMOTION:
+                if self.middle_mouse_pressed:
+                    dx, dy = event.rel
+                    sensitivity = 0.005  # Adjust sensitivity as needed
+                    self.game.camera.yaw(-dx * sensitivity)
+                    self.game.camera.pitch(-dy * sensitivity)
             elif event.type == pygame.KEYDOWN:
                 if self.game.filename_edit_mode:
                     if event.key == pygame.K_RETURN:
