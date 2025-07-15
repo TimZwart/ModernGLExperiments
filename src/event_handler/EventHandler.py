@@ -15,22 +15,38 @@ class EventHandler:
                 continue_running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
+                    mods = pygame.key.get_mods()
+                    ctrl_pressed = mods & pygame.KMOD_CTRL
                     x, y = event.pos
                     if self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         self.game.filename_edit_mode = True
-                    elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and self.game.selected_vertex is not None:
+                    elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
-                        self.game.edit_text = f"{list(verticesHolder.vertices[self.game.selected_vertex*6:self.game.selected_vertex*6+3])}"
-                    elif self.handle_vertex_list_click(x, y):
+                        selected = list(self.game.selected_vertices)[0]
+                        self.game.edit_text = f"{list(verticesHolder.vertices[selected*6:selected*6+3])}"
+                    elif self.handle_vertex_list_click(x, y, ctrl_pressed):
                         pass # Vertex in the list was clicked, no need to do anything else
                     else:
                         nearest_vertex = self.find_nearest_vertex(x, y)
                         if nearest_vertex is not None:
-                            self.game.selected_vertex = nearest_vertex
+                            if ctrl_pressed:
+                                if nearest_vertex in self.game.selected_vertices:
+                                    self.game.selected_vertices.remove(nearest_vertex)
+                                else:
+                                    self.game.selected_vertices.add(nearest_vertex)
+                            else:
+                                self.game.selected_vertices = {nearest_vertex}
+                        else:
+                            if not ctrl_pressed:
+                                self.game.selected_vertices.clear()
+                        # After selection change, check if should enter edit_mode
+                        if len(self.game.selected_vertices) == 1:
+                            self.game.edit_mode = True
+                            selected = list(self.game.selected_vertices)[0]
+                            self.game.edit_text = f"{list(verticesHolder.vertices[selected*6:selected*6+3])}"
+                        else:
                             self.game.edit_mode = False
                             self.game.edit_text = ""
-                        else:
-                            print("No vertex nearby")
                 elif event.button == 2:  # Middle mouse button
                     self.middle_mouse_pressed = True
 
@@ -134,16 +150,21 @@ class EventHandler:
         return nearest_index
 
     def apply_edit(self):
+        if len(self.game.selected_vertices) != 1:
+            print("Cannot edit multiple vertices")
+            self.game.edit_mode = False
+            return
+        selected = list(self.game.selected_vertices)[0]
         try:
             new_coords = eval(self.game.edit_text)
             if isinstance(new_coords, (list, tuple)) and len(new_coords) == 3:
-                verticesHolder.vertices[self.game.selected_vertex*6:self.game.selected_vertex*6+3] = new_coords
+                verticesHolder.vertices[selected*6:selected*6+3] = new_coords
                 print(f"New vertex coordinates set to: {new_coords}")
                 self.game.edit_mode = False
                 print("edit mode deactivated")
                 self.game.renderer.renderer3D.update_vertex_buffer()
             else:
-                print(f"return pressed in edit mode, but input was not valid: {new_coords} has length {len(new_coords)} and type {type(new_coords)}")
+                print(f"Invalid input: {self.game.edit_text}")
         except:
             print("Invalid input. Please enter coordinates as [x, y, z]")
             raise
@@ -175,12 +196,16 @@ class EventHandler:
         self.game.filename_edit_mode = False
         print(f"Save filename set to: {self.game.filename_text}")
 
-    def handle_vertex_list_click(self, x, y):
+    def handle_vertex_list_click(self, x, y, ctrl_pressed):
         for actual_index, rect in self.game.uiOverlayCreator.vertex_rects:
             if rect.collidepoint(x, y):
-                self.game.selected_vertex = actual_index
-                self.game.edit_mode = True
-                self.game.edit_text = f"{list(verticesHolder.vertices[self.game.selected_vertex*6:self.game.selected_vertex*6+3])}"
+                if ctrl_pressed:
+                    if actual_index in self.game.selected_vertices:
+                        self.game.selected_vertices.remove(actual_index)
+                    else:
+                        self.game.selected_vertices.add(actual_index)
+                else:
+                    self.game.selected_vertices = {actual_index}
                 return True
         return False
 

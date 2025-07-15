@@ -37,7 +37,8 @@ class UIOverlayCreator:
         total_vertices = len(verticesHolder.vertices) // 6
         for i in range(self.scroll_offset, min(self.scroll_offset + self.max_visible_vertices, total_vertices)):
             vertex_text = f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}"
-            text_surface = self.font.render(vertex_text, True, (255, 255, 255))
+            color = (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
+            text_surface = self.font.render(vertex_text, True, color)
             y_position = 40 + (i - self.scroll_offset) * 30
             self.overlay.blit(text_surface, (10, y_position))
             
@@ -66,19 +67,25 @@ class UIOverlayCreator:
             pygame.draw.rect(self.overlay, (100, 100, 100), self.game.filename_rect, 1)
 
         # Display selected vertex coordinates
-        if self.game.selected_vertex is not None:
-            selected_coords = verticesHolder.vertices[self.game.selected_vertex * 6:self.game.selected_vertex * 6 + 3]
-            if self.game.edit_mode:
-                selected_text = self.font.render(f"Edit Vertex: {self.game.edit_text}", True, (255, 255, 0))
+        if self.game.selected_vertices:
+            if len(self.game.selected_vertices) == 1:
+                selected = list(self.game.selected_vertices)[0]
+                selected_coords = verticesHolder.vertices[selected * 6:selected * 6 + 3]
+                if self.game.edit_mode:
+                    selected_text = self.font.render(f"Edit Vertex {selected}: {self.game.edit_text}", True, (255, 255, 0))
+                    pygame.draw.rect(self.overlay, (255, 255, 0), self.game.edit_rect, 2)
+                else:
+                    selected_text = self.font.render(f"Selected Vertex {selected}: {selected_coords}", True, (255, 255, 0))
+                self.overlay.blit(selected_text, (10, self.height - 50))
+
+                # Update editable area
+                self.game.edit_rect.top = self.height - 35
                 pygame.draw.rect(self.overlay, (255, 255, 0), self.game.edit_rect, 2)
+
+                if self.game.edit_mode:
+                    edit_surface = self.font.render(self.game.edit_text, True, (255, 255, 0))
+                    self.overlay.blit(edit_surface, (15, self.height - 30))
             else:
-                selected_text = self.font.render(f"Selected Vertex: {selected_coords}", True, (255, 255, 0))
-            self.overlay.blit(selected_text, (10, self.height - 50))
-
-            # Update editable area
-            self.game.edit_rect.top = self.height - 35
-            pygame.draw.rect(self.overlay, (255, 255, 0), self.game.edit_rect, 2)
-
-            if self.game.edit_mode:
-                edit_surface = self.font.render(self.game.edit_text, True, (255, 255, 0))
-                self.overlay.blit(edit_surface, (15, self.height - 30))
+                selected_list = sorted(list(self.game.selected_vertices))
+                selected_text = self.font.render(f"Selected Vertices: {selected_list}", True, (255, 255, 0))
+                self.overlay.blit(selected_text, (10, self.height - 50))

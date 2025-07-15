@@ -11,7 +11,7 @@ class Game:
         self.width, self.height = width, height
         self.relative_movement = relative_movement
         self.overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        self.selected_vertex = None  # Add this line
+        self.selected_vertices = set()
         self.edit_mode = False
         self.edit_text = ""
         self.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
