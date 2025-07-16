@@ -2,6 +2,7 @@ import pygame
 from src.geometry.VerticesHolder import verticesHolder
 
 import numpy as np
+from src.configuration.loadconfig import keybindings
 
 class EventHandler:
     def __init__(self, game):
@@ -75,38 +76,38 @@ class EventHandler:
                         self.game.edit_text = self.game.edit_text[:-1]
                     else:
                         self.game.edit_text += event.unicode
-                elif event.key == pygame.K_p:  # 'P' key to add a vertex
+                elif event.key == pygame.key.key_code(keybindings['add_vertex']):  # add a vertex
                     self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
-                elif event.key == pygame.K_o:  # 'O' key to save vertices
+                elif event.key == pygame.key.key_code(keybindings['save_vertices']):  # save vertices
                     self.save_vertices()
-                elif event.key == pygame.K_c:  # 'C' key to change filename
+                elif event.key == pygame.key.key_code(keybindings['change_filename']):  # change filename
                     self.game.filename_edit_mode = True
-                elif event.key == pygame.K_w:
+                elif event.key == pygame.key.key_code(keybindings['forward']):
                     if self.game.relative_movement:
                         self.game.camera.relative_forward()
                     else:
                         self.game.camera.forward()
-                elif event.key == pygame.K_s:
+                elif event.key == pygame.key.key_code(keybindings['backward']):
                     if self.game.relative_movement:
                         self.game.camera.relative_backward()
                     else:
                         self.game.camera.backward()
-                elif event.key == pygame.K_a:
+                elif event.key == pygame.key.key_code(keybindings['left']):
                     if self.game.relative_movement:
                         self.game.camera.relative_left()
                     else:
                         self.game.camera.left()
-                elif event.key == pygame.K_d:
+                elif event.key == pygame.key.key_code(keybindings['right']):
                     if self.game.relative_movement:
                         self.game.camera.relative_right()
                     else:
                         self.game.camera.right()
-                elif event.key == pygame.K_q:
+                elif event.key == pygame.key.key_code(keybindings['up']):
                     if self.game.relative_movement:
                         self.game.camera.relative_upwards()
                     else:
                         self.game.camera.upwards()
-                elif event.key == pygame.K_e:
+                elif event.key == pygame.key.key_code(keybindings['down']):
                     if self.game.relative_movement:
                         self.game.camera.relative_downwards()
                     else:
