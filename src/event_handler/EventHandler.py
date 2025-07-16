@@ -2,6 +2,7 @@ import pygame
 from src.geometry.VerticesHolder import verticesHolder
 
 import numpy as np
+import itertools
 from src.configuration.loadconfig import keybindings
 
 class EventHandler:
@@ -82,6 +83,8 @@ class EventHandler:
                     self.save_vertices()
                 elif event.key == pygame.key.key_code(keybindings['change_filename']):  # change filename
                     self.game.filename_edit_mode = True
+                elif event.key == pygame.key.key_code(keybindings['form_triangles']):
+                    self.form_triangles_from_selected()
                 elif event.key == pygame.key.key_code(keybindings['forward']):
                     if self.game.relative_movement:
                         self.game.camera.relative_forward()
@@ -217,3 +220,34 @@ class EventHandler:
         else:  # Scroll down
             max_offset = max(0, total_vertices - self.game.uiOverlayCreator.max_visible_vertices)
             self.game.uiOverlayCreator.scroll_offset = min(max_offset, self.game.uiOverlayCreator.scroll_offset + self.game.scroll_speed) 
+
+    def form_triangles_from_selected(self):
+        if len(self.game.selected_vertices) < 3:
+            return
+
+        selected = sorted(list(self.game.selected_vertices))
+        vertices = verticesHolder.vertices.reshape(-1, 6)
+
+        existing_triangles = []
+        num_tri = len(vertices) // 3
+        for t in range(num_tri):
+            tri_pos = set(tuple(vertices[t*3 + i, :3]) for i in range(3))
+            existing_triangles.append(tri_pos)
+
+        new_triangles = []
+        for comb in itertools.combinations(selected, 3):
+            pos = [tuple(vertices[i, :3]) for i in comb]
+            pos_set = set(pos)
+            if pos_set not in existing_triangles:
+                new_triangles.append(pos)
+
+        new_data = []
+        for tri_pos in new_triangles:
+            new_color = self.game.random_color()
+            for pos in tri_pos:
+                new_data.extend(pos)
+                new_data.extend(new_color)
+
+        if new_data:
+            verticesHolder.vertices = np.append(verticesHolder.vertices, new_data).astype('f4')
+            self.game.renderer.renderer3D.update_vertex_buffer() 
