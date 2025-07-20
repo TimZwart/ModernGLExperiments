@@ -1,4 +1,5 @@
 import pygame
+import numpy as np
 
 from src.game import Game
 from src.geometry.VerticesHolder import verticesHolder
@@ -89,3 +90,16 @@ class UIOverlayCreator:
                 selected_list = sorted(list(self.game.selected_vertices))
                 selected_text = self.font.render(f"Selected Vertices: {selected_list}", True, (255, 255, 0))
                 self.overlay.blit(selected_text, (10, self.height - 50))
+
+        # Draw selected vertices markers
+        if self.game.selected_vertices:
+            selected_indices = list(self.game.selected_vertices)
+            vertices = verticesHolder.vertices.reshape(-1, 6)
+            selected_pos = vertices[selected_indices, :3]
+            screen_coords = self.game.renderer.renderer3D.world_to_screen(selected_pos)
+            square_size = 8
+            for coord in screen_coords:
+                sx, sy = coord
+                if not np.isnan(sx) and not np.isnan(sy) and 0 <= sx < self.width and 0 <= sy < self.height:
+                    rect = pygame.Rect(sx - square_size // 2, sy - square_size // 2, square_size, square_size)
+                    pygame.draw.rect(self.overlay, (255, 0, 0, 255), rect)
