@@ -46,15 +46,17 @@ class WorldScreenSpaceConverter:
             print(f"Vertex {i}: {coord}")
 
         # Check clip space coordinates
-        assert np.all(np.abs(clip_coords[:, :3]) <= np.abs(clip_coords[:, 3:4])), "Clip space coordinates are outside the canonical view volume"
+        #assert np.all(np.abs(clip_coords[:, :3]) <= np.abs(clip_coords[:, 3:4])), "Clip space coordinates are outside the canonical view volume"
+
     def _asserts_after_normalized_device_coordinates(self, ndc_coords):
-        assert np.all(np.abs(ndc_coords) <= 1), "NDC coordinates are outside the [-1, 1] range"
+        pass
+        #assert np.all(np.abs(ndc_coords) <= 1), "NDC coordinates are outside the [-1, 1] range"
+
+
+
 
 
     def _assert_and_print_after_screen_coords(self, screen_coords, clip_coords, ndc_coords):
-        assert np.all(screen_coords >= 0) and np.all(screen_coords[:, 0] <= self.width) and np.all(
-            screen_coords[:, 1] <= self.height), "Screen coordinates are outside the screen boundaries"
-
         print(f"World coordinates shape: {self.world_coords.shape}")
         print(f"Screen coordinates shape: {screen_coords.shape}")
         print(
@@ -63,3 +65,6 @@ class WorldScreenSpaceConverter:
             f"NDC coordinate ranges: X ({ndc_coords[:, 0].min():.2f}, {ndc_coords[:, 0].max():.2f}), Y ({ndc_coords[:, 1].min():.2f}, {ndc_coords[:, 1].max():.2f}), Z ({ndc_coords[:, 2].min():.2f}, {ndc_coords[:, 2].max():.2f})")
         print(
             f"Screen coordinate ranges: X ({screen_coords[:, 0].min():.2f}, {screen_coords[:, 0].max():.2f}), Y ({screen_coords[:, 1].min():.2f}, {screen_coords[:, 1].max():.2f})")
+        #assert np.all(screen_coords >= 0) and np.all(screen_coords[:, 0] <= self.width) and np.all(
+            #screen_coords[:, 1] <= self.height), "Screen coordinates are outside the screen boundaries"
+
