@@ -3,6 +3,7 @@ import numpy as np
 
 from src.game import Game
 from src.geometry.VerticesHolder import verticesHolder
+from src.configuration.loadconfig import keybindings, mouse_rotation_button
 
 
 class UIOverlayCreator:
@@ -23,6 +24,9 @@ class UIOverlayCreator:
     def draw_ui_overlay(self):
         # Clear the overlay
         self.overlay.fill((0, 0, 0, 0))
+        if self.game.help_mode:
+            self.draw_help_screen()
+            return
         # Render text on the overlay
         debug_text = self.font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
         self.overlay.blit(debug_text, (10, 10))
@@ -103,3 +107,32 @@ class UIOverlayCreator:
                 if not np.isnan(sx) and not np.isnan(sy) and 0 <= sx < self.width and 0 <= sy < self.height:
                     rect = pygame.Rect(sx - square_size // 2, sy - square_size // 2, square_size, square_size)
                     pygame.draw.rect(self.overlay, (255, 0, 0, 255), rect)
+
+    def draw_help_screen(self):
+        font = pygame.font.Font(None, 24)
+        help_texts = [
+            "Keybindings:",
+            f"Forward: {keybindings['forward'].upper()} or Arrow Up",
+            f"Backward: {keybindings['backward'].upper()} or Arrow Down",
+            f"Left: {keybindings['left'].upper()} or Arrow Left",
+            f"Right: {keybindings['right'].upper()} or Arrow Right",
+            f"Up: {keybindings['up'].upper()} or Page Up",
+            f"Down: {keybindings['down'].upper()} or Page Down",
+            f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert",
+            f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
+            f"Change Filename: {keybindings['change_filename'].upper()} or F6",
+            f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
+            f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
+            f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
+            f"Pitch Up: {keybindings['pitch_up'].upper()} or Numpad 8",
+            f"Pitch Down: {keybindings['pitch_down'].upper()} or Numpad 2",
+            f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
+            f"Help: {keybindings['help'].upper()} or F1",
+            f"Mouse Rotation: Button {mouse_rotation_button}",
+            "Press H or F1 again to close help",
+        ]
+        y = 20
+        for text in help_texts:
+            surf = font.render(text, True, (255, 255, 255))
+            self.overlay.blit(surf, (20, y))
+            y += 30

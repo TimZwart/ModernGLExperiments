@@ -26,6 +26,7 @@ class EventHandler:
             'pitch_up': pygame.K_KP8,
             'pitch_down': pygame.K_KP2,
             'toggle_wireframe': pygame.K_F8,
+            'help': pygame.K_F1,
         }
         self.rotation_speed = 0.1
 
@@ -144,6 +145,8 @@ class EventHandler:
                     self.game.camera.pitch(-self.rotation_speed)
                 if event.key == pygame.key.key_code(keybindings['toggle_wireframe']) or event.key == self.alternate_keys['toggle_wireframe']:
                     self.game.renderer.renderer3D.toggle_wireframe()
+                if event.key == pygame.key.key_code(keybindings['help']) or event.key == self.alternate_keys['help']:
+                    self.game.help_mode = not self.game.help_mode
             elif event.type == pygame.MOUSEWHEEL:
                 self.handle_scroll(event.y)
         

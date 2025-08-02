@@ -35,6 +35,7 @@ class Game:
             self.current_color = self.random_color()
         self.scroll_speed = 3
         self.yellow_highlights = set()
+        self.help_mode = False
 
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)
