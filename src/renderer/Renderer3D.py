@@ -1,5 +1,5 @@
 import numpy as np
-from moderngl import Context, TRIANGLE_STRIP, TRIANGLES
+from moderngl import Context, TRIANGLE_STRIP, TRIANGLES, LINES
 import pygame
 from pyrr import Matrix44
 
@@ -22,6 +22,7 @@ class Renderer3D:
         self.width = width
         self.height = height
         self.camera = camera
+        self.wireframe = False
 
         # Initialize uniform locations, checking if they exist
         self.mvp = self.prog['mvp']
@@ -54,7 +55,7 @@ class Renderer3D:
             eye_pos = np.array(self.camera.eye, dtype='f4')
             self.eye_position.write(eye_pos)
         
-        self.vao.render(TRIANGLES)
+        self.vao.render(LINES if self.wireframe else TRIANGLES)
         if self.ctx.error != 'GL_NO_ERROR':
             print("OpenGL error:")
             print(self.ctx.error)
@@ -75,3 +76,6 @@ class Renderer3D:
         )
         proj = Matrix44.perspective_projection(45.0, self.width / self.height, 0.1, 100.0)
         return (proj * view * model).astype('f4')
+
+    def toggle_wireframe(self):
+        self.wireframe = not self.wireframe

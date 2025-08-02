@@ -33,7 +33,8 @@ class Game:
                 self.current_color = last_vertex[3:6].tolist()
         else:
             self.current_color = self.random_color()
-        self.scroll_speed = 3  # Number of vertices to scroll per mouse wheel event
+        self.scroll_speed = 3
+        self.yellow_highlights = set()
 
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)

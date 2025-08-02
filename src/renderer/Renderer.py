@@ -13,12 +13,13 @@ class Renderer:
         self.renderer3D : Renderer3D = Renderer3D(self.ctx, width, height, camera)
         self.uiOverlayCreator = uiOverlayCreator
         self.text_renderer : OverlayRenderer = OverlayRenderer(self.ctx)
+        self.ctx.enable(moderngl.DEPTH_TEST)
 
     def render(self):
         self.uiOverlayCreator.draw_ui_overlay()
         self.text_renderer.update_text_texture(self.uiOverlayCreator.overlay)
 
-        self.ctx.clear(0.2, 0.3, 0.3)
+        self.ctx.clear(0.2, 0.3, 0.3, 1.0, depth=1.0)
         self.renderer3D.render3D()
         self.text_renderer.render_text_texture()
         pygame.display.flip()

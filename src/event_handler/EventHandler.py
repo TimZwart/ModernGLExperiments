@@ -3,12 +3,31 @@ from src.geometry.VerticesHolder import verticesHolder
 
 import numpy as np
 import itertools
-from src.configuration.loadconfig import keybindings
+from src.configuration.loadconfig import keybindings, mouse_rotation_button
 
 class EventHandler:
     def __init__(self, game):
         self.game = game
-        self.middle_mouse_pressed = False
+        self.rotation_button = mouse_rotation_button
+        self.mouse_rotation_pressed = False
+        self.alternate_keys = {
+            'forward': pygame.K_UP,
+            'backward': pygame.K_DOWN,
+            'left': pygame.K_LEFT,
+            'right': pygame.K_RIGHT,
+            'up': pygame.K_PAGEUP,
+            'down': pygame.K_PAGEDOWN,
+            'add_vertex': pygame.K_INSERT,
+            'save_vertices': pygame.K_F5,
+            'change_filename': pygame.K_F6,
+            'form_triangles': pygame.K_F7,
+            'yaw_left': pygame.K_KP4,
+            'yaw_right': pygame.K_KP6,
+            'pitch_up': pygame.K_KP8,
+            'pitch_down': pygame.K_KP2,
+            'toggle_wireframe': pygame.K_F8,
+        }
+        self.rotation_speed = 0.1
 
     def handle_events(self):
         continue_running = True
@@ -49,15 +68,15 @@ class EventHandler:
                         else:
                             self.game.edit_mode = False
                             self.game.edit_text = ""
-                elif event.button == 2:  # Middle mouse button
-                    self.middle_mouse_pressed = True
+                elif event.button == self.rotation_button:
+                    self.mouse_rotation_pressed = True
 
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 2:
-                    self.middle_mouse_pressed = False
+                if event.button == self.rotation_button:
+                    self.mouse_rotation_pressed = False
 
             elif event.type == pygame.MOUSEMOTION:
-                if self.middle_mouse_pressed:
+                if self.mouse_rotation_pressed:
                     dx, dy = event.rel
                     sensitivity = 0.005  # Adjust sensitivity as needed
                     self.game.camera.yaw(-dx * sensitivity)
@@ -77,44 +96,54 @@ class EventHandler:
                         self.game.edit_text = self.game.edit_text[:-1]
                     else:
                         self.game.edit_text += event.unicode
-                elif event.key == pygame.key.key_code(keybindings['add_vertex']):  # add a vertex
+                if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
                     self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
-                elif event.key == pygame.key.key_code(keybindings['save_vertices']):  # save vertices
+                if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
                     self.save_vertices()
-                elif event.key == pygame.key.key_code(keybindings['change_filename']):  # change filename
+                if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
                     self.game.filename_edit_mode = True
-                elif event.key == pygame.key.key_code(keybindings['form_triangles']):
+                if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
                     self.form_triangles_from_selected()
-                elif event.key == pygame.key.key_code(keybindings['forward']):
+                if event.key == pygame.key.key_code(keybindings['forward']) or event.key == self.alternate_keys['forward']:
                     if self.game.relative_movement:
                         self.game.camera.relative_forward()
                     else:
                         self.game.camera.forward()
-                elif event.key == pygame.key.key_code(keybindings['backward']):
+                if event.key == pygame.key.key_code(keybindings['backward']) or event.key == self.alternate_keys['backward']:
                     if self.game.relative_movement:
                         self.game.camera.relative_backward()
                     else:
                         self.game.camera.backward()
-                elif event.key == pygame.key.key_code(keybindings['left']):
+                if event.key == pygame.key.key_code(keybindings['left']) or event.key == self.alternate_keys['left']:
                     if self.game.relative_movement:
                         self.game.camera.relative_left()
                     else:
                         self.game.camera.left()
-                elif event.key == pygame.key.key_code(keybindings['right']):
+                if event.key == pygame.key.key_code(keybindings['right']) or event.key == self.alternate_keys['right']:
                     if self.game.relative_movement:
                         self.game.camera.relative_right()
                     else:
                         self.game.camera.right()
-                elif event.key == pygame.key.key_code(keybindings['up']):
+                if event.key == pygame.key.key_code(keybindings['up']) or event.key == self.alternate_keys['up']:
                     if self.game.relative_movement:
                         self.game.camera.relative_upwards()
                     else:
                         self.game.camera.upwards()
-                elif event.key == pygame.key.key_code(keybindings['down']):
+                if event.key == pygame.key.key_code(keybindings['down']) or event.key == self.alternate_keys['down']:
                     if self.game.relative_movement:
                         self.game.camera.relative_downwards()
                     else:
                         self.game.camera.downwards()
+                if event.key == pygame.key.key_code(keybindings['yaw_left']) or event.key == self.alternate_keys['yaw_left']:
+                    self.game.camera.yaw(self.rotation_speed)
+                if event.key == pygame.key.key_code(keybindings['yaw_right']) or event.key == self.alternate_keys['yaw_right']:
+                    self.game.camera.yaw(-self.rotation_speed)
+                if event.key == pygame.key.key_code(keybindings['pitch_up']) or event.key == self.alternate_keys['pitch_up']:
+                    self.game.camera.pitch(self.rotation_speed)
+                if event.key == pygame.key.key_code(keybindings['pitch_down']) or event.key == self.alternate_keys['pitch_down']:
+                    self.game.camera.pitch(-self.rotation_speed)
+                if event.key == pygame.key.key_code(keybindings['toggle_wireframe']) or event.key == self.alternate_keys['toggle_wireframe']:
+                    self.game.renderer.renderer3D.toggle_wireframe()
             elif event.type == pygame.MOUSEWHEEL:
                 self.handle_scroll(event.y)
         
@@ -225,6 +254,8 @@ class EventHandler:
         if len(self.game.selected_vertices) < 3:
             return
 
+        self.game.yellow_highlights.clear()
+
         selected = sorted(list(self.game.selected_vertices))
         vertices = verticesHolder.vertices.reshape(-1, 6)
 
@@ -235,11 +266,24 @@ class EventHandler:
             existing_triangles.append(tri_pos)
 
         new_triangles = []
+        duplicate_triangle_indices = []
         for comb in itertools.combinations(selected, 3):
             pos = [tuple(vertices[i, :3]) for i in comb]
             pos_set = set(pos)
             if pos_set not in existing_triangles:
                 new_triangles.append(pos)
+            else:
+                t = existing_triangles.index(pos_set)
+                duplicate_triangle_indices.append(t)
+
+        if duplicate_triangle_indices:
+            highlighted_vertices = set()
+            for t in duplicate_triangle_indices:
+                highlighted_vertices.update([t*3, t*3+1, t*3+2])
+            self.game.yellow_highlights = highlighted_vertices
+
+            min_vertex = min(highlighted_vertices)
+            self.game.uiOverlayCreator.scroll_offset = min_vertex
 
         new_data = []
         for tri_pos in new_triangles:

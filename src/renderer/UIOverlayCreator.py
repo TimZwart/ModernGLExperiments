@@ -38,7 +38,7 @@ class UIOverlayCreator:
         total_vertices = len(verticesHolder.vertices) // 6
         for i in range(self.scroll_offset, min(self.scroll_offset + self.max_visible_vertices, total_vertices)):
             vertex_text = f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}"
-            color = (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
+            color = (255, 255, 0) if i in self.game.yellow_highlights else (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
             text_surface = self.font.render(vertex_text, True, color)
             y_position = 40 + (i - self.scroll_offset) * 30
             self.overlay.blit(text_surface, (10, y_position))

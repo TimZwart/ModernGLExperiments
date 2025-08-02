@@ -17,5 +17,5 @@ void main() {
     // Combine base color with distance-based attenuation
     vec3 final_color = modified_color * (0.2 + 0.8 * attenuation);
     
-    f_color = vec4(modified_color, 1.0);
+    f_color = vec4(modified_color, 0.5);
 }
