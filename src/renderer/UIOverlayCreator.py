@@ -30,12 +30,10 @@ class UIOverlayCreator:
         # Render text on the overlay
         debug_text = self.font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
         self.overlay.blit(debug_text, (10, 10))
-        # Camera controls text
-        camera_controls_text = self.font.render("Camera: W/S=Forward/Back  A/D=Left/Right  Q/E=Up/Down", True, (0, 255, 255))
-        self.overlay.blit(camera_controls_text, (10, self.height - 110))
-        
-        add_vertex_text = self.font.render(f"Press 'P' to add vertex  'O' to save  'C' to change filename  Current: {self.game.filename_text}", True, (255, 255, 0))
-        self.overlay.blit(add_vertex_text, (10, self.height - 80))
+        help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
+        self.overlay.blit(help_prompt, (10, self.height - 110))
+        filename_text = self.font.render(f"Current file: {self.game.filename_text}", True, (255, 255, 0))
+        self.overlay.blit(filename_text, (10, self.height - 80))
         
         # Create a clickable area for each vertex
         self.vertex_rects = []
