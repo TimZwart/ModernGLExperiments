@@ -57,6 +57,12 @@ class UIOverlayCreator:
             pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, self.height - 85), (20, self.height - 75), (30, self.height - 85)])
 
         # Display filename editing area
+        # Always anchor the filename UI to the bottom of the screen
+        bottom_padding = 10
+        rect_height = self.game.filename_rect.height
+        rect_top = self.height - rect_height - bottom_padding
+        self.game.filename_rect.topleft = (10, rect_top)
+
         if self.game.filename_edit_mode:
             filename_text = self.font.render(f"Edit Filename: {self.game.filename_text}", True, (0, 255, 0))
             self.overlay.blit(filename_text, (10, self.height - 170))
@@ -66,8 +72,8 @@ class UIOverlayCreator:
         else:
             # Show clickable filename area
             filename_display = self.font.render(f"Save to: {self.game.filename_text} (click to edit)", True, (150, 150, 150))
-            self.overlay.blit(filename_display, (10, self.height - 170))
             pygame.draw.rect(self.overlay, (100, 100, 100), self.game.filename_rect, 1)
+            self.overlay.blit(filename_display, (15, rect_top + 5))
 
         # Display selected vertex coordinates
         if self.game.selected_vertices:
