@@ -33,6 +33,20 @@ class EventHandler:
     def handle_events(self):
         continue_running = True
         for event in pygame.event.get():
+            # While editing the save filename, disable all other controls except text entry and QUIT
+            if self.game.filename_edit_mode:
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        self.apply_filename_edit()
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.game.filename_text = self.game.filename_text[:-1]
+                    else:
+                        self.game.filename_text += event.unicode
+                # Swallow all other events during filename edit mode
+                continue
             if event.type == pygame.QUIT:
                 continue_running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -42,6 +56,7 @@ class EventHandler:
                     x, y = event.pos
                     if self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         self.game.filename_edit_mode = True
+                        self.mouse_rotation_pressed = False
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
                         selected = list(self.game.selected_vertices)[0]
@@ -103,6 +118,7 @@ class EventHandler:
                     self.save_vertices()
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
                     self.game.filename_edit_mode = True
+                    self.mouse_rotation_pressed = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
                     self.form_triangles_from_selected()
                 if event.key == pygame.key.key_code(keybindings['forward']) or event.key == self.alternate_keys['forward']:
