@@ -64,11 +64,9 @@ class UIOverlayCreator:
         self.game.filename_rect.topleft = (10, rect_top)
 
         if self.game.filename_edit_mode:
-            filename_text = self.font.render(f"Edit Filename: {self.game.filename_text}", True, (0, 255, 0))
-            self.overlay.blit(filename_text, (10, self.height - 170))
             pygame.draw.rect(self.overlay, (0, 255, 0), self.game.filename_rect, 2)
             filename_surface = self.font.render(self.game.filename_text, True, (0, 255, 0))
-            self.overlay.blit(filename_surface, (15, self.height - 135))
+            self.overlay.blit(filename_surface, (15, rect_top + 5))
         else:
             # Show clickable filename area
             filename_display = self.font.render(f"Save to: {self.game.filename_text} (click to edit)", True, (150, 150, 150))
