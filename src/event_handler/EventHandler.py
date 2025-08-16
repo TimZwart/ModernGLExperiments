@@ -244,9 +244,13 @@ class EventHandler:
         print(f"Vertices saved to {filename}")
 
     def apply_filename_edit(self):
-        # Simply exit filename edit mode - the filename_text is already updated
+        # Exit filename edit mode and immediately save to the new file
         self.game.filename_edit_mode = False
         print(f"Save filename set to: {self.game.filename_text}")
+        try:
+            self.save_vertices()
+        except Exception as e:
+            print(f"Error saving to {self.game.filename_text}: {e}")
 
     def handle_vertex_list_click(self, x, y, ctrl_pressed):
         for actual_index, rect in self.game.uiOverlayCreator.vertex_rects:
