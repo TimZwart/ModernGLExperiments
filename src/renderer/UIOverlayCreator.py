@@ -139,7 +139,14 @@ class UIOverlayCreator:
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts:
+        for text in help_texts[:-1]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
+
+        # Put the last item on a second column
+        last_text = help_texts[-1]
+        second_col_x = self.width // 2 + 20
+        y2 = 20
+        surf = font.render(last_text, True, (255, 255, 255))
+        self.overlay.blit(surf, (second_col_x, y2))
