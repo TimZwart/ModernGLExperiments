@@ -34,7 +34,9 @@ class Renderer3D:
             return shader_file.read()
 
     def update_vertex_buffer(self):
-        self.vbo.write(verticesHolder.vertices)
+        if verticesHolder.vertices.size:
+            self.vbo.write(verticesHolder.vertices)
+        # If empty, keep buffer as-is; render() will pass explicit count 0
 
     def world_to_screen(self, world_coords):
         mvp = self.get_mvp_matrix(pygame.time.get_ticks() * 0.001)
@@ -55,7 +57,11 @@ class Renderer3D:
             eye_pos = np.array(self.camera.eye, dtype='f4')
             self.eye_position.write(eye_pos)
         
-        self.vao.render(LINES if self.wireframe else TRIANGLES)
+        current_vertex_count = len(verticesHolder.vertices) // 6
+        mode = LINES if self.wireframe else TRIANGLES
+        if current_vertex_count > 0:
+            self.vao.render(mode=mode, vertices=current_vertex_count)
+        # When there are zero vertices, skip rendering geometry
         if self.ctx.error != 'GL_NO_ERROR':
             print("OpenGL error:")
             print(self.ctx.error)
