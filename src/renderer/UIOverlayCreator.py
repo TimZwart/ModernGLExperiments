@@ -112,6 +112,10 @@ class UIOverlayCreator:
 
     def draw_help_screen(self):
         font = pygame.font.Font(None, 24)
+        rotate_key = keybindings.get('rotate', None)
+        rotate_help = f"Mouse Rotation: Button {mouse_rotation_button}"
+        if rotate_key:
+            rotate_help = f"Mouse Rotation: Button {mouse_rotation_button} or {rotate_key.upper()} (hold)"
         help_texts = [
             "Keybindings:",
             f"Forward: {keybindings['forward'].upper()} or Arrow Up",
@@ -130,7 +134,7 @@ class UIOverlayCreator:
             f"Pitch Down: {keybindings['pitch_down'].upper()} or Numpad 2",
             f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
             f"Help: {keybindings['help'].upper()} or F1",
-            f"Mouse Rotation: Button {mouse_rotation_button}",
+            rotate_help,
             "Press H or F1 again to close help",
         ]
         y = 20

@@ -9,7 +9,8 @@ class EventHandler:
     def __init__(self, game):
         self.game = game
         self.rotation_button = mouse_rotation_button
-        self.mouse_rotation_pressed = False
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
         self.alternate_keys = {
             'forward': pygame.K_UP,
             'backward': pygame.K_DOWN,
@@ -56,7 +57,8 @@ class EventHandler:
                     x, y = event.pos
                     if self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         self.game.filename_edit_mode = True
-                        self.mouse_rotation_pressed = False
+                        self.mouse_button_rotation_held = False
+                        self.rotate_key_held = False
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
                         selected = list(self.game.selected_vertices)[0]
@@ -85,18 +87,22 @@ class EventHandler:
                             self.game.edit_mode = False
                             self.game.edit_text = ""
                 elif event.button == self.rotation_button:
-                    self.mouse_rotation_pressed = True
+                    self.mouse_button_rotation_held = True
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == self.rotation_button:
-                    self.mouse_rotation_pressed = False
+                    self.mouse_button_rotation_held = False
 
             elif event.type == pygame.MOUSEMOTION:
-                if self.mouse_rotation_pressed:
+                if self.mouse_button_rotation_held or self.rotate_key_held:
                     dx, dy = event.rel
                     sensitivity = 0.005  # Adjust sensitivity as needed
                     self.game.camera.yaw(-dx * sensitivity)
                     self.game.camera.pitch(-dy * sensitivity)
+            elif event.type == pygame.KEYUP:
+                # Release rotation when the configured rotate key is released
+                if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
+                    self.rotate_key_held = False
             elif event.type == pygame.KEYDOWN:
                 if self.game.filename_edit_mode:
                     if event.key == pygame.K_RETURN:
@@ -112,13 +118,17 @@ class EventHandler:
                         self.game.edit_text = self.game.edit_text[:-1]
                     else:
                         self.game.edit_text += event.unicode
+                # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
+                if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
+                    self.rotate_key_held = True
                 if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
                     self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
                 if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
                     self.save_vertices()
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
                     self.game.filename_edit_mode = True
-                    self.mouse_rotation_pressed = False
+                    self.mouse_button_rotation_held = False
+                    self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
                     self.form_triangles_from_selected()
                 if event.key == pygame.key.key_code(keybindings['forward']) or event.key == self.alternate_keys['forward']:
