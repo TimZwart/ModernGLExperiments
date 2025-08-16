@@ -35,6 +35,20 @@ class EventHandler:
     def handle_events(self):
         continue_running = True
         for event in pygame.event.get():
+            # While entering a new vertex's coordinates, disable all other controls except text entry and QUIT
+            if self.game.add_vertex_mode:
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        self.apply_add_vertex()
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.game.add_vertex_text = self.game.add_vertex_text[:-1]
+                    else:
+                        self.game.add_vertex_text += event.unicode
+                # Swallow all other events during add-vertex edit mode
+                continue
             # While editing the save filename, disable all other controls except text entry and QUIT
             if self.game.filename_edit_mode:
                 if event.type == pygame.QUIT:
@@ -56,7 +70,13 @@ class EventHandler:
                     mods = pygame.key.get_mods()
                     ctrl_pressed = mods & pygame.KMOD_CTRL
                     x, y = event.pos
-                    if self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
+                    if self.game.add_vertex_rect and self.game.add_vertex_rect.collidepoint(x, y):
+                        self.game.add_vertex_mode = True
+                        # Prefill with a template list compatible with eval
+                        self.game.add_vertex_text = "[0.0, 0.0, 0.0]"
+                        self.mouse_button_rotation_held = False
+                        self.rotate_key_held = False
+                    elif self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         self.game.filename_edit_mode = True
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
@@ -119,11 +139,19 @@ class EventHandler:
                         self.game.edit_text = self.game.edit_text[:-1]
                     else:
                         self.game.edit_text += event.unicode
+                # Only allow deletion when not in any text-editing mode
+                if not (self.game.filename_edit_mode or self.game.add_vertex_mode or self.game.edit_mode):
+                    if event.key == pygame.K_DELETE:
+                        self.delete_selected_vertices()
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
                     self.rotate_key_held = True
                 if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
-                    self.add_vertex(0.0, 0.0, 0.0)  # Add a vertex at (0, 0, 0)
+                    # Enter add-vertex input mode instead of adding at origin
+                    self.game.add_vertex_mode = True
+                    self.game.add_vertex_text = "[0.0, 0.0, 0.0]"
+                    self.mouse_button_rotation_held = False
+                    self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
                     self.save_vertices()
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
@@ -240,6 +268,21 @@ class EventHandler:
             print("Invalid input. Please enter coordinates as [x, y, z]")
             raise
 
+    def apply_add_vertex(self):
+        try:
+            new_coords = eval(self.game.add_vertex_text)
+            if isinstance(new_coords, (list, tuple)) and len(new_coords) == 3:
+                x, y, z = map(float, new_coords)
+                self.add_vertex(x, y, z)
+                print(f"Added vertex at: {new_coords}")
+                self.game.add_vertex_mode = False
+                self.game.add_vertex_text = ""
+            else:
+                print(f"Invalid input: {self.game.add_vertex_text}")
+        except:
+            print("Invalid input. Please enter coordinates as [x, y, z]")
+            raise
+
     def add_vertex(self, x:float, y:float, z:float):
         assert isinstance(x, float), "x must be float"
         assert isinstance(y, float), "y must be float"
@@ -352,3 +395,46 @@ class EventHandler:
         if new_data:
             verticesHolder.vertices = np.append(verticesHolder.vertices, new_data).astype('f4')
             self.game.renderer.renderer3D.update_vertex_buffer() 
+
+    def delete_selected_vertices(self):
+        if not self.game.selected_vertices:
+            return
+        try:
+            vertices = verticesHolder.vertices
+            if vertices.size == 0:
+                return
+            vertex_rows = vertices.reshape(-1, 6)
+            max_index = len(vertex_rows) - 1
+            indices_to_delete = sorted([i for i in self.game.selected_vertices if 0 <= i <= max_index])
+            if not indices_to_delete:
+                return
+            keep_mask = np.ones(len(vertex_rows), dtype=bool)
+            keep_mask[indices_to_delete] = False
+            new_rows = vertex_rows[keep_mask]
+            verticesHolder.vertices = new_rows.astype('f4').flatten()
+
+            # Clear selection and editing state
+            self.game.selected_vertices.clear()
+            self.game.edit_mode = False
+            self.game.edit_text = ""
+            self.game.yellow_highlights.clear()
+
+            # Clamp scroll
+            total_vertices = len(verticesHolder.vertices) // 6
+            max_offset = max(0, total_vertices - self.game.uiOverlayCreator.max_visible_vertices)
+            self.game.uiOverlayCreator.scroll_offset = min(self.game.uiOverlayCreator.scroll_offset, max_offset)
+
+            # Maintain current color for subsequent additions
+            if total_vertices > 0:
+                if total_vertices % 3 == 0:
+                    self.game.current_color = self.game.random_color()
+                else:
+                    last_vertex_color = verticesHolder.vertices[-3:]
+                    self.game.current_color = last_vertex_color.tolist()
+            else:
+                self.game.current_color = self.game.random_color()
+
+            # Update GPU buffer
+            self.game.renderer.renderer3D.update_vertex_buffer()
+        except Exception as e:
+            print(f"Error deleting vertices: {e}")

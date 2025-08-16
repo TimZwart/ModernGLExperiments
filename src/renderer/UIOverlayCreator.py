@@ -73,6 +73,18 @@ class UIOverlayCreator:
             pygame.draw.rect(self.overlay, (100, 100, 100), self.game.filename_rect, 1)
             self.overlay.blit(filename_display, (15, rect_top + 5))
 
+        # Display add-vertex input field above filename area
+        add_rect_top = rect_top - 35
+        self.game.add_vertex_rect.topleft = (10, add_rect_top)
+        if self.game.add_vertex_mode:
+            pygame.draw.rect(self.overlay, (0, 200, 255), self.game.add_vertex_rect, 2)
+            add_surface = self.font.render(self.game.add_vertex_text, True, (0, 200, 255))
+            self.overlay.blit(add_surface, (15, add_rect_top + 5))
+        else:
+            add_hint = self.font.render("Add vertex: press P to enter [x, y, z]", True, (120, 120, 120))
+            pygame.draw.rect(self.overlay, (80, 80, 80), self.game.add_vertex_rect, 1)
+            self.overlay.blit(add_hint, (15, add_rect_top + 5))
+
         # Display selected vertex coordinates
         if self.game.selected_vertices:
             if len(self.game.selected_vertices) == 1:
@@ -124,7 +136,8 @@ class UIOverlayCreator:
             f"Right: {keybindings['right'].upper()} or Arrow Right",
             f"Up: {keybindings['up'].upper()} or Page Up",
             f"Down: {keybindings['down'].upper()} or Page Down",
-            f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert",
+            f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert (enter [x, y, z])",
+            "Delete Selected: Delete",
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
             f"Change Filename: {keybindings['change_filename'].upper()} or F6",
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
@@ -136,6 +149,7 @@ class UIOverlayCreator:
             f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
+            "Edit selected vertex: click its line or red box, then type [x, y, z], Enter to apply",
             "Press H or F1 again to close help",
         ]
         y = 20

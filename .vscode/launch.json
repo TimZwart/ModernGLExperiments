@@ -18,11 +18,11 @@
             "python": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments/.venv/Scripts/python.exe"
         },
         {
-            "name": "Python: Launch game.py with scout.vertices",
+            "name": "Python: Launch game.py with bom.vertices",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/main.py",
-            "args": ["assets/scout.vertices"],
+            "args": ["assets/bom.vertices"],
             "console": "integratedTerminal",
             "cwd": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments",
             "python": "C:/Users/timwa/Documents/GitHub/ModernGLExperiments/.venv/Scripts/python.exe",

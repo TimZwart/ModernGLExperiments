@@ -7,7 +7,7 @@ import random
 from src.configuration.loadconfig import relative_movement
 
 class Game:
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: int, height: int, initial_filename: str = None):
         self.width, self.height = width, height
         self.relative_movement = relative_movement
         self.overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
@@ -15,9 +15,13 @@ class Game:
         self.edit_mode = False
         self.edit_text = ""
         self.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
+        # Add-vertex editing variables
+        self.add_vertex_mode = False
+        self.add_vertex_text = ""
+        self.add_vertex_rect = pygame.Rect(10, self.height - 105, 350, 30)
         # Filename editing variables
         self.filename_edit_mode = False
-        self.filename_text = "assets/scout.vertices"
+        self.filename_text = initial_filename or "assets/bom.vertices"
         self.filename_edit_purpose = 'save'
         self.filename_rect = pygame.Rect(10, self.height - 140, 350, 30)
         self.camera = Camera()
