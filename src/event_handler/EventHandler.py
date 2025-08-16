@@ -21,6 +21,7 @@ class EventHandler:
             'add_vertex': pygame.K_INSERT,
             'save_vertices': pygame.K_F5,
             'change_filename': pygame.K_F6,
+            'new_file': pygame.K_F9,
             'form_triangles': pygame.K_F7,
             'yaw_left': pygame.K_KP4,
             'yaw_right': pygame.K_KP6,
@@ -127,6 +128,12 @@ class EventHandler:
                     self.save_vertices()
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
                     self.game.filename_edit_mode = True
+                    self.game.filename_edit_purpose = 'save'
+                    self.mouse_button_rotation_held = False
+                    self.rotate_key_held = False
+                if (('new_file' in keybindings) and event.key == pygame.key.key_code(keybindings['new_file'])) or event.key == self.alternate_keys['new_file']:
+                    self.game.filename_edit_mode = True
+                    self.game.filename_edit_purpose = 'new'
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
@@ -179,6 +186,8 @@ class EventHandler:
         return continue_running 
 
     def find_nearest_vertex(self, x, y):
+        if verticesHolder.vertices.size == 0:
+            return None
         vertices = verticesHolder.vertices.reshape(-1, 6)
         screen_coords = self.game.renderer.renderer3D.world_to_screen(vertices[:, :3])
         
@@ -256,11 +265,26 @@ class EventHandler:
     def apply_filename_edit(self):
         # Exit filename edit mode and immediately save to the new file
         self.game.filename_edit_mode = False
-        print(f"Save filename set to: {self.game.filename_text}")
-        try:
-            self.save_vertices()
-        except Exception as e:
-            print(f"Error saving to {self.game.filename_text}: {e}")
+        purpose = getattr(self.game, 'filename_edit_purpose', 'save')
+        if purpose == 'new':
+            print(f"New file name set to: {self.game.filename_text}. Clearing all vertices.")
+            try:
+                verticesHolder.vertices = np.array([], dtype='f4')
+                self.game.selected_vertices.clear()
+                self.game.yellow_highlights.clear()
+                self.game.uiOverlayCreator.scroll_offset = 0
+                self.game.current_color = self.game.random_color()
+                self.game.renderer.renderer3D.update_vertex_buffer()
+            except Exception as e:
+                print(f"Error clearing vertices for new file {self.game.filename_text}: {e}")
+            finally:
+                self.game.filename_edit_purpose = 'save'
+        else:
+            print(f"Save filename set to: {self.game.filename_text}")
+            try:
+                self.save_vertices()
+            except Exception as e:
+                print(f"Error saving to {self.game.filename_text}: {e}")
 
     def handle_vertex_list_click(self, x, y, ctrl_pressed):
         for actual_index, rect in self.game.uiOverlayCreator.vertex_rects:

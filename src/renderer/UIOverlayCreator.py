@@ -127,6 +127,7 @@ class UIOverlayCreator:
             f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert",
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
             f"Change Filename: {keybindings['change_filename'].upper()} or F6",
+            f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
             f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",

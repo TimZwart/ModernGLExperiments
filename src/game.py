@@ -18,6 +18,7 @@ class Game:
         # Filename editing variables
         self.filename_edit_mode = False
         self.filename_text = "assets/scout.vertices"
+        self.filename_edit_purpose = 'save'
         self.filename_rect = pygame.Rect(10, self.height - 140, 350, 30)
         self.camera = Camera()
         from src.renderer.UIOverlayCreator import UIOverlayCreator
