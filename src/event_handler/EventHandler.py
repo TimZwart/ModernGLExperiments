@@ -1,5 +1,6 @@
 import pygame
 from src.geometry.VerticesHolder import verticesHolder
+from src.geometry.loader import load_vertices_from_file
 
 import numpy as np
 import itertools
@@ -24,6 +25,7 @@ class EventHandler:
             'change_filename': pygame.K_F6,
             'new_file': pygame.K_F9,
             'form_triangles': pygame.K_F7,
+            'open_file': pygame.K_F3,
             'yaw_left': pygame.K_KP4,
             'yaw_right': pygame.K_KP6,
             'pitch_up': pygame.K_KP8,
@@ -83,8 +85,14 @@ class EventHandler:
                         self.game.add_vertex_error = ""
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
+                    elif hasattr(self.game, 'open_rect') and self.game.open_rect and self.game.open_rect.collidepoint(x, y):
+                        self.game.filename_edit_mode = True
+                        self.game.filename_edit_purpose = 'open'
+                        self.mouse_button_rotation_held = False
+                        self.rotate_key_held = False
                     elif self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         self.game.filename_edit_mode = True
+                        self.game.filename_edit_purpose = 'save'
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
@@ -173,6 +181,11 @@ class EventHandler:
                 if (('new_file' in keybindings) and event.key == pygame.key.key_code(keybindings['new_file'])) or event.key == self.alternate_keys['new_file']:
                     self.game.filename_edit_mode = True
                     self.game.filename_edit_purpose = 'new'
+                    self.mouse_button_rotation_held = False
+                    self.rotate_key_held = False
+                if (('open_file' in keybindings) and event.key == pygame.key.key_code(keybindings['open_file'])) or event.key == self.alternate_keys['open_file']:
+                    self.game.filename_edit_mode = True
+                    self.game.filename_edit_purpose = 'open'
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
@@ -352,6 +365,31 @@ class EventHandler:
                 self.game.renderer.renderer3D.update_vertex_buffer()
             except Exception as e:
                 print(f"Error clearing vertices for new file {self.game.filename_text}: {e}")
+            finally:
+                self.game.filename_edit_purpose = 'save'
+        elif purpose == 'open':
+            print(f"Opening file: {self.game.filename_text}")
+            try:
+                loaded = load_vertices_from_file(self.game.filename_text)
+                verticesHolder.vertices = loaded
+                self.game.selected_vertices.clear()
+                self.game.yellow_highlights.clear()
+                self.game.uiOverlayCreator.scroll_offset = 0
+
+                total_vertices = len(verticesHolder.vertices) // 6
+                if total_vertices > 0:
+                    if total_vertices % 3 == 0:
+                        self.game.current_color = self.game.random_color()
+                    else:
+                        last_vertex = verticesHolder.vertices[-6:]
+                        self.game.current_color = last_vertex[3:6].tolist()
+                else:
+                    self.game.current_color = self.game.random_color()
+
+                self.game.renderer.renderer3D.update_vertex_buffer()
+                print(f"Loaded vertices from {self.game.filename_text}: count={(len(verticesHolder.vertices)//6)}")
+            except Exception as e:
+                print(f"Error opening {self.game.filename_text}: {e}")
             finally:
                 self.game.filename_edit_purpose = 'save'
         else:

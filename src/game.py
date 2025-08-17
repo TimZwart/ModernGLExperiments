@@ -25,6 +25,8 @@ class Game:
         self.filename_text = initial_filename or "assets/bom.vertices"
         self.filename_edit_purpose = 'save'
         self.filename_rect = pygame.Rect(10, self.height - 140, 350, 30)
+        # Open file clickable area
+        self.open_rect = pygame.Rect(10, self.height - 175, 350, 30)
         self.camera = Camera()
         from src.renderer.UIOverlayCreator import UIOverlayCreator
         self.uiOverlayCreator = UIOverlayCreator(width, height, self)

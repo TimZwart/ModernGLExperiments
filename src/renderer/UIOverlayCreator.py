@@ -56,25 +56,35 @@ class UIOverlayCreator:
         if total_vertices > self.scroll_offset + self.max_visible_vertices:
             pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, self.height - 85), (20, self.height - 75), (30, self.height - 85)])
 
-        # Display filename editing area
-        # Always anchor the filename UI to the bottom of the screen
+        # Display filename editing area (Save)
         bottom_padding = 10
         rect_height = self.game.filename_rect.height
-        rect_top = self.height - rect_height - bottom_padding
-        self.game.filename_rect.topleft = (10, rect_top)
+        save_rect_top = self.height - rect_height - bottom_padding
+        self.game.filename_rect.topleft = (10, save_rect_top)
 
-        if self.game.filename_edit_mode:
+        if self.game.filename_edit_mode and getattr(self.game, 'filename_edit_purpose', 'save') == 'save':
             pygame.draw.rect(self.overlay, (0, 255, 0), self.game.filename_rect, 2)
             filename_surface = self.font.render(self.game.filename_text, True, (0, 255, 0))
-            self.overlay.blit(filename_surface, (15, rect_top + 5))
+            self.overlay.blit(filename_surface, (15, save_rect_top + 5))
         else:
-            # Show clickable filename area
             filename_display = self.font.render(f"Save to: {self.game.filename_text} (click to edit)", True, (150, 150, 150))
             pygame.draw.rect(self.overlay, (100, 100, 100), self.game.filename_rect, 1)
-            self.overlay.blit(filename_display, (15, rect_top + 5))
+            self.overlay.blit(filename_display, (15, save_rect_top + 5))
 
-        # Display add-vertex input field above filename area
-        add_rect_top = rect_top - 35
+        # Open file field above Save
+        open_rect_top = save_rect_top - 35
+        self.game.open_rect.topleft = (10, open_rect_top)
+        if self.game.filename_edit_mode and getattr(self.game, 'filename_edit_purpose', 'save') == 'open':
+            pygame.draw.rect(self.overlay, (0, 200, 255), self.game.open_rect, 2)
+            open_surface = self.font.render(self.game.filename_text, True, (0, 200, 255))
+            self.overlay.blit(open_surface, (15, open_rect_top + 5))
+        else:
+            open_hint = self.font.render("Open file: press B or F3 (click to edit path)", True, (120, 120, 120))
+            pygame.draw.rect(self.overlay, (80, 80, 80), self.game.open_rect, 1)
+            self.overlay.blit(open_hint, (15, open_rect_top + 5))
+
+        # Add-vertex input field above Open
+        add_rect_top = open_rect_top - 35
         self.game.add_vertex_rect.topleft = (10, add_rect_top)
         if self.game.add_vertex_mode:
             pygame.draw.rect(self.overlay, (0, 200, 255), self.game.add_vertex_rect, 2)
@@ -146,6 +156,7 @@ class UIOverlayCreator:
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
             f"Change Filename: {keybindings['change_filename'].upper()} or F6",
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
+            f"Open File: {keybindings.get('open_file', 'b').upper()} or F3",
             f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
