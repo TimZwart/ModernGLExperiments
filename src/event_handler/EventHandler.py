@@ -1,6 +1,7 @@
 import pygame
 from src.geometry.VerticesHolder import verticesHolder
 from src.geometry.loader import load_vertices_from_file
+from src.configuration.session_store import set_last_file
 
 import numpy as np
 import itertools
@@ -363,6 +364,7 @@ class EventHandler:
                 self.game.uiOverlayCreator.scroll_offset = 0
                 self.game.current_color = self.game.random_color()
                 self.game.renderer.renderer3D.update_vertex_buffer()
+                set_last_file(self.game.filename_text)
             except Exception as e:
                 print(f"Error clearing vertices for new file {self.game.filename_text}: {e}")
             finally:
@@ -388,6 +390,7 @@ class EventHandler:
 
                 self.game.renderer.renderer3D.update_vertex_buffer()
                 print(f"Loaded vertices from {self.game.filename_text}: count={(len(verticesHolder.vertices)//6)}")
+                set_last_file(self.game.filename_text)
             except Exception as e:
                 print(f"Error opening {self.game.filename_text}: {e}")
             finally:
@@ -396,6 +399,7 @@ class EventHandler:
             print(f"Save filename set to: {self.game.filename_text}")
             try:
                 self.save_vertices()
+                set_last_file(self.game.filename_text)
             except Exception as e:
                 print(f"Error saving to {self.game.filename_text}: {e}")
 
