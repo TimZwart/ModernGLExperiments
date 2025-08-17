@@ -138,6 +138,7 @@ class UIOverlayCreator:
             f"Down: {keybindings['down'].upper()} or Page Down",
             f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert (enter [x, y, z])",
             "Delete Selected: Delete",
+            f"Clear All Vertices: {keybindings.get('clear_vertices', 'x').upper()}",
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
             f"Change Filename: {keybindings['change_filename'].upper()} or F6",
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
@@ -153,14 +154,15 @@ class UIOverlayCreator:
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts[:-1]:
+        for text in help_texts[:-5]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
 
-        # Put the last item on a second column
-        last_text = help_texts[-1]
+        # Put the last five items on a second column
         second_col_x = self.width // 2 + 20
         y2 = 20
-        surf = font.render(last_text, True, (255, 255, 255))
-        self.overlay.blit(surf, (second_col_x, y2))
+        for text in help_texts[-5:]:
+            surf = font.render(text, True, (255, 255, 255))
+            self.overlay.blit(surf, (second_col_x, y2))
+            y2 += 30

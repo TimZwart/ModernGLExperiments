@@ -143,6 +143,9 @@ class EventHandler:
                 if not (self.game.filename_edit_mode or self.game.add_vertex_mode or self.game.edit_mode):
                     if event.key == pygame.K_DELETE:
                         self.delete_selected_vertices()
+                    # Clear all vertices via configured key (e.g., X)
+                    if 'clear_vertices' in keybindings and event.key == pygame.key.key_code(keybindings['clear_vertices']):
+                        self.clear_all_vertices()
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
                     self.rotate_key_held = True
@@ -438,3 +441,17 @@ class EventHandler:
             self.game.renderer.renderer3D.update_vertex_buffer()
         except Exception as e:
             print(f"Error deleting vertices: {e}")
+
+    def clear_all_vertices(self):
+        try:
+            verticesHolder.vertices = np.array([], dtype='f4')
+            self.game.selected_vertices.clear()
+            self.game.yellow_highlights.clear()
+            self.game.uiOverlayCreator.scroll_offset = 0
+            self.game.current_color = self.game.random_color()
+            self.game.edit_mode = False
+            self.game.edit_text = ""
+            self.game.renderer.renderer3D.update_vertex_buffer()
+            print("All vertices cleared")
+        except Exception as e:
+            print(f"Error clearing all vertices: {e}")
