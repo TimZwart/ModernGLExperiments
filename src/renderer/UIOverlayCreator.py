@@ -80,6 +80,10 @@ class UIOverlayCreator:
             pygame.draw.rect(self.overlay, (0, 200, 255), self.game.add_vertex_rect, 2)
             add_surface = self.font.render(self.game.add_vertex_text, True, (0, 200, 255))
             self.overlay.blit(add_surface, (15, add_rect_top + 5))
+            # Render validation error above the input if present
+            if getattr(self.game, 'add_vertex_error', ""):
+                err_surface = self.font.render(self.game.add_vertex_error, True, (255, 80, 80))
+                self.overlay.blit(err_surface, (15, max(0, add_rect_top - 20)))
         else:
             add_hint = self.font.render("Add vertex: press P to enter [x, y, z]", True, (120, 120, 120))
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.add_vertex_rect, 1)

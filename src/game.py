@@ -19,6 +19,7 @@ class Game:
         self.add_vertex_mode = False
         self.add_vertex_text = ""
         self.add_vertex_rect = pygame.Rect(10, self.height - 105, 350, 30)
+        self.add_vertex_error = ""
         # Filename editing variables
         self.filename_edit_mode = False
         self.filename_text = initial_filename or "assets/bom.vertices"

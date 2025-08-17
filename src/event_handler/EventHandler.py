@@ -4,6 +4,7 @@ from src.geometry.VerticesHolder import verticesHolder
 import numpy as np
 import itertools
 from src.configuration.loadconfig import keybindings, mouse_rotation_button
+import ast
 
 class EventHandler:
     def __init__(self, game):
@@ -45,8 +46,13 @@ class EventHandler:
                         self.apply_add_vertex()
                     elif event.key == pygame.K_BACKSPACE:
                         self.game.add_vertex_text = self.game.add_vertex_text[:-1]
+                        self.game.add_vertex_error = ""
                     else:
+                        # Clear placeholder on first typed character
+                        if self.game.add_vertex_text == "[0.0, 0.0, 0.0]":
+                            self.game.add_vertex_text = ""
                         self.game.add_vertex_text += event.unicode
+                        self.game.add_vertex_error = ""
                 # Swallow all other events during add-vertex edit mode
                 continue
             # While editing the save filename, disable all other controls except text entry and QUIT
@@ -74,6 +80,7 @@ class EventHandler:
                         self.game.add_vertex_mode = True
                         # Prefill with a template list compatible with eval
                         self.game.add_vertex_text = "[0.0, 0.0, 0.0]"
+                        self.game.add_vertex_error = ""
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
                     elif self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
@@ -153,6 +160,7 @@ class EventHandler:
                     # Enter add-vertex input mode instead of adding at origin
                     self.game.add_vertex_mode = True
                     self.game.add_vertex_text = "[0.0, 0.0, 0.0]"
+                    self.game.add_vertex_error = ""
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
@@ -272,19 +280,40 @@ class EventHandler:
             raise
 
     def apply_add_vertex(self):
-        try:
-            new_coords = eval(self.game.add_vertex_text)
-            if isinstance(new_coords, (list, tuple)) and len(new_coords) == 3:
-                x, y, z = map(float, new_coords)
-                self.add_vertex(x, y, z)
-                print(f"Added vertex at: {new_coords}")
-                self.game.add_vertex_mode = False
-                self.game.add_vertex_text = ""
+        # Safely parse and validate input like [x, y, z]
+        text = (self.game.add_vertex_text or "").strip()
+        # If user accidentally typed a second list after the placeholder, keep the last list
+        if text.count('[') > 1:
+            last_open = text.rfind('[')
+            last_close = text.rfind(']')
+            if last_close != -1 and last_close > last_open:
+                text = text[last_open:last_close+1]
             else:
-                print(f"Invalid input: {self.game.add_vertex_text}")
-        except:
-            print("Invalid input. Please enter coordinates as [x, y, z]")
-            raise
+                text = text[last_open:]
+        try:
+            parsed = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            self.game.add_vertex_error = "Invalid format. Use [x, y, z] with numbers."
+            print(f"Invalid add-vertex input: {text}")
+            return
+
+        if not (isinstance(parsed, (list, tuple)) and len(parsed) == 3):
+            self.game.add_vertex_error = "Enter exactly three numbers like [1.0, 2.0, 3.0]."
+            print(f"Invalid add-vertex input (not 3 items): {parsed}")
+            return
+
+        try:
+            x, y, z = (float(parsed[0]), float(parsed[1]), float(parsed[2]))
+        except (TypeError, ValueError):
+            self.game.add_vertex_error = "Coordinates must be numbers."
+            print(f"Invalid add-vertex input (non-numeric): {parsed}")
+            return
+
+        self.add_vertex(x, y, z)
+        print(f"Added vertex at: {[x, y, z]}")
+        self.game.add_vertex_mode = False
+        self.game.add_vertex_text = ""
+        self.game.add_vertex_error = ""
 
     def add_vertex(self, x:float, y:float, z:float):
         assert isinstance(x, float), "x must be float"
