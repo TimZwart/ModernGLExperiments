@@ -27,6 +27,7 @@ class EventHandler:
             'new_file': pygame.K_F9,
             'form_triangles': pygame.K_F7,
             'open_file': pygame.K_F3,
+            'remove_backfaces': pygame.K_F10,
             'yaw_left': pygame.K_KP4,
             'yaw_right': pygame.K_KP6,
             'pitch_up': pygame.K_KP8,
@@ -191,6 +192,8 @@ class EventHandler:
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
                     self.form_triangles_from_selected()
+                if (('remove_backfaces' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_backfaces'])) or event.key == self.alternate_keys['remove_backfaces']:
+                    self.remove_backfacing_triangles()
                 if event.key == pygame.key.key_code(keybindings['forward']) or event.key == self.alternate_keys['forward']:
                     if self.game.relative_movement:
                         self.game.camera.relative_forward()
@@ -459,8 +462,24 @@ class EventHandler:
             min_vertex = min(highlighted_vertices)
             self.game.uiOverlayCreator.scroll_offset = min_vertex
 
+        def is_front_facing(p0, p1, p2):
+            p0 = np.array(p0, dtype=float)
+            p1 = np.array(p1, dtype=float)
+            p2 = np.array(p2, dtype=float)
+            normal = np.cross(p1 - p0, p2 - p0)
+            norm_len = np.linalg.norm(normal)
+            if norm_len == 0:
+                return False
+            centroid = (p0 + p1 + p2) / 3.0
+            to_camera = np.array(self.game.camera.eye, dtype=float) - centroid
+            return float(np.dot(normal, to_camera)) > 0.0
+
         new_data = []
+        skipped_count = 0
         for tri_pos in new_triangles:
+            if not is_front_facing(tri_pos[0], tri_pos[1], tri_pos[2]):
+                skipped_count += 1
+                continue
             new_color = self.game.random_color()
             for pos in tri_pos:
                 new_data.extend(pos)
@@ -469,6 +488,67 @@ class EventHandler:
         if new_data:
             verticesHolder.vertices = np.append(verticesHolder.vertices, new_data).astype('f4')
             self.game.renderer.renderer3D.update_vertex_buffer() 
+        if skipped_count:
+            print(f"Skipped {skipped_count} back-facing triangle(s) during fill.")
+
+    def remove_backfacing_triangles(self):
+        vertices = verticesHolder.vertices
+        if vertices.size == 0:
+            return
+        rows = vertices.reshape(-1, 6)
+        num_tri = len(rows) // 3
+        if num_tri == 0:
+            return
+
+        def tri_front(t_index:int) -> bool:
+            i0 = t_index * 3
+            p0 = rows[i0, :3]
+            p1 = rows[i0 + 1, :3]
+            p2 = rows[i0 + 2, :3]
+            p0 = np.array(p0, dtype=float)
+            p1 = np.array(p1, dtype=float)
+            p2 = np.array(p2, dtype=float)
+            normal = np.cross(p1 - p0, p2 - p0)
+            norm_len = np.linalg.norm(normal)
+            if norm_len == 0:
+                return False
+            centroid = (p0 + p1 + p2) / 3.0
+            to_camera = np.array(self.game.camera.eye, dtype=float) - centroid
+            return float(np.dot(normal, to_camera)) > 0.0
+
+        keep_mask = np.array([tri_front(t) for t in range(num_tri)], dtype=bool)
+        removed = int((~keep_mask).sum())
+        if removed == 0:
+            print("No back-facing triangles to remove.")
+            return
+
+        kept_rows = rows[:num_tri * 3].reshape(num_tri, 3, 6)[keep_mask].reshape(-1, 6)
+        remainder = rows[num_tri * 3:]
+        if remainder.size:
+            new_rows = np.vstack([kept_rows, remainder])
+        else:
+            new_rows = kept_rows
+        verticesHolder.vertices = new_rows.astype('f4').flatten()
+
+        # Clear selection and editing state
+        self.game.selected_vertices.clear()
+        self.game.edit_mode = False
+        self.game.edit_text = ""
+        self.game.yellow_highlights.clear()
+
+        # Maintain current color for subsequent additions
+        total_vertices = len(verticesHolder.vertices) // 6
+        if total_vertices > 0:
+            if total_vertices % 3 == 0:
+                self.game.current_color = self.game.random_color()
+            else:
+                last_vertex_color = verticesHolder.vertices[-3:]
+                self.game.current_color = last_vertex_color.tolist()
+        else:
+            self.game.current_color = self.game.random_color()
+
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        print(f"Removed {removed} back-facing triangle(s).")
 
     def delete_selected_vertices(self):
         if not self.game.selected_vertices:

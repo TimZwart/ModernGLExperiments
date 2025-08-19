@@ -21,4 +21,6 @@ relative_movement = get_boolean_config('relative_movement')
 keybindings = {k: v.lower() for k, v in config['KEYBINDINGS'].items()}
 if 'open_file' not in keybindings:
     keybindings['open_file'] = 'b'
+if 'remove_backfaces' not in keybindings:
+    keybindings['remove_backfaces'] = 'f10'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))
