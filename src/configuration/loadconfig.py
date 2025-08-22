@@ -23,4 +23,7 @@ if 'open_file' not in keybindings:
     keybindings['open_file'] = 'b'
 if 'remove_backfaces' not in keybindings:
     keybindings['remove_backfaces'] = 'f10'
+# Default keybinding for edge check if not provided
+if 'check_edge' not in keybindings:
+    keybindings['check_edge'] = 'f11'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

@@ -30,6 +30,11 @@ class UIOverlayCreator:
         # Render text on the overlay
         debug_text = self.font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
         self.overlay.blit(debug_text, (10, 10))
+        # Status message (transient)
+        msg_text, msg_frames = self.game.status_message
+        if msg_frames > 0 and msg_text:
+            status_surface = self.font.render(msg_text, True, (0, 255, 0))
+            self.overlay.blit(status_surface, (10, 25))
         help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
         self.overlay.blit(help_prompt, (10, self.height - 110))
         filename_text = self.font.render(f"Current file: {self.game.filename_text}", True, (255, 255, 0))
@@ -158,7 +163,8 @@ class UIOverlayCreator:
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
             f"Open File: {keybindings.get('open_file', 'b').upper()} or F3",
             f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
-            f"Remove Back-Facing Triangles: {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
+            f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
+            f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
             f"Pitch Up: {keybindings['pitch_up'].upper()} or Numpad 8",

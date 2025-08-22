@@ -44,6 +44,8 @@ class Game:
         self.scroll_speed = 3
         self.yellow_highlights = set()
         self.help_mode = False
+        # Transient status message shown on-screen (text, frames_remaining)
+        self.status_message = ("", 0)
 
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)
@@ -55,5 +57,15 @@ class Game:
         running = True
         while running:
             running = self.event_handler.handle_events()
+            self.tick_status()
             self.renderer.render()
         pygame.quit()
+
+    def set_status(self, text:str, frames:int=180):
+        # ~3 seconds at 60 FPS by default
+        self.status_message = (str(text), int(max(1, frames)))
+
+    def tick_status(self):
+        text, frames = self.status_message
+        if frames > 0:
+            self.status_message = (text, frames - 1)

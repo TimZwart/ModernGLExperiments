@@ -34,6 +34,7 @@ class EventHandler:
             'pitch_down': pygame.K_KP2,
             'toggle_wireframe': pygame.K_F8,
             'help': pygame.K_F1,
+            'check_edge': pygame.K_F11,
         }
         self.rotation_speed = 0.1
 
@@ -236,6 +237,8 @@ class EventHandler:
                     self.game.renderer.renderer3D.toggle_wireframe()
                 if event.key == pygame.key.key_code(keybindings['help']) or event.key == self.alternate_keys['help']:
                     self.game.help_mode = not self.game.help_mode
+                if (('check_edge' in keybindings) and event.key == pygame.key.key_code(keybindings['check_edge'])) or event.key == self.alternate_keys['check_edge']:
+                    self.check_selected_edge_exists()
             elif event.type == pygame.MOUSEWHEEL:
                 self.handle_scroll(event.y)
         
@@ -462,7 +465,16 @@ class EventHandler:
             min_vertex = min(highlighted_vertices)
             self.game.uiOverlayCreator.scroll_offset = min_vertex
 
-        def is_front_facing(p0, p1, p2):
+        # Object-centric orientation: outward is away from object bounding-box center
+        all_positions = verticesHolder.vertices.reshape(-1, 6)[:, :3]
+        if len(all_positions) > 0:
+            mins = np.min(all_positions, axis=0)
+            maxs = np.max(all_positions, axis=0)
+            object_center = (mins + maxs) * 0.5
+        else:
+            object_center = np.array([0.0, 0.0, 0.0])
+
+        def is_outward(p0, p1, p2):
             p0 = np.array(p0, dtype=float)
             p1 = np.array(p1, dtype=float)
             p2 = np.array(p2, dtype=float)
@@ -470,16 +482,20 @@ class EventHandler:
             norm_len = np.linalg.norm(normal)
             if norm_len == 0:
                 return False
-            centroid = (p0 + p1 + p2) / 3.0
-            to_camera = np.array(self.game.camera.eye, dtype=float) - centroid
-            return float(np.dot(normal, to_camera)) > 0.0
+            tri_center = (p0 + p1 + p2) / 3.0
+            from_object_center = tri_center - object_center
+            dot = float(np.dot(normal, from_object_center))
+            # Tolerance to avoid flipping near-zero ambiguous cases
+            eps = 1e-8 * (np.linalg.norm(from_object_center) * norm_len + 1.0)
+            return dot >= -eps
 
         new_data = []
-        skipped_count = 0
+        flipped_count = 0
         for tri_pos in new_triangles:
-            if not is_front_facing(tri_pos[0], tri_pos[1], tri_pos[2]):
-                skipped_count += 1
-                continue
+            # Ensure outward orientation by flipping winding if needed
+            if not is_outward(tri_pos[0], tri_pos[1], tri_pos[2]):
+                tri_pos = [tri_pos[0], tri_pos[2], tri_pos[1]]
+                flipped_count += 1
             new_color = self.game.random_color()
             for pos in tri_pos:
                 new_data.extend(pos)
@@ -488,8 +504,8 @@ class EventHandler:
         if new_data:
             verticesHolder.vertices = np.append(verticesHolder.vertices, new_data).astype('f4')
             self.game.renderer.renderer3D.update_vertex_buffer() 
-        if skipped_count:
-            print(f"Skipped {skipped_count} back-facing triangle(s) during fill.")
+        if flipped_count:
+            print(f"Flipped winding for {flipped_count} triangle(s) during fill to face outward.")
 
     def remove_backfacing_triangles(self):
         vertices = verticesHolder.vertices
@@ -500,7 +516,16 @@ class EventHandler:
         if num_tri == 0:
             return
 
-        def tri_front(t_index:int) -> bool:
+        # Object-centric orientation: outward is away from object bounding-box center
+        all_positions = rows[:, :3]
+        if len(all_positions) > 0:
+            mins = np.min(all_positions, axis=0)
+            maxs = np.max(all_positions, axis=0)
+            object_center = (mins + maxs) * 0.5
+        else:
+            object_center = np.array([0.0, 0.0, 0.0])
+
+        def tri_outward(t_index:int) -> bool:
             i0 = t_index * 3
             p0 = rows[i0, :3]
             p1 = rows[i0 + 1, :3]
@@ -512,23 +537,57 @@ class EventHandler:
             norm_len = np.linalg.norm(normal)
             if norm_len == 0:
                 return False
-            centroid = (p0 + p1 + p2) / 3.0
-            to_camera = np.array(self.game.camera.eye, dtype=float) - centroid
-            return float(np.dot(normal, to_camera)) > 0.0
+            tri_center = (p0 + p1 + p2) / 3.0
+            from_object_center = tri_center - object_center
+            dot = float(np.dot(normal, from_object_center))
+            eps = 1e-8 * (np.linalg.norm(from_object_center) * norm_len + 1.0)
+            return dot >= -eps
 
-        keep_mask = np.array([tri_front(t) for t in range(num_tri)], dtype=bool)
-        removed = int((~keep_mask).sum())
-        if removed == 0:
-            print("No back-facing triangles to remove.")
+        flipped = 0
+        for t in range(num_tri):
+            if not tri_outward(t):
+                i0 = t * 3
+                # Swap rows i0+1 and i0+2 to flip winding
+                tmp = rows[i0 + 1].copy()
+                rows[i0 + 1] = rows[i0 + 2]
+                rows[i0 + 2] = tmp
+                flipped += 1
+
+        # Remove duplicate triangles (same three positions, ignoring order and colors)
+        num_tri_after = len(rows) // 3
+        seen = set()
+        keep_row_indices = []
+        duplicates_removed = 0
+
+        def canonical_key(p0, p1, p2):
+            def round_triplet(p):
+                return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
+            pts = sorted([round_triplet(p0), round_triplet(p1), round_triplet(p2)])
+            return tuple(pts)
+
+        for t in range(num_tri_after):
+            i0 = t * 3
+            p0 = rows[i0, :3]
+            p1 = rows[i0 + 1, :3]
+            p2 = rows[i0 + 2, :3]
+            key = canonical_key(p0, p1, p2)
+            if key in seen:
+                duplicates_removed += 1
+                continue
+            seen.add(key)
+            keep_row_indices.extend([i0, i0 + 1, i0 + 2])
+
+        if duplicates_removed > 0:
+            rows = rows[keep_row_indices]
+
+        if flipped == 0 and duplicates_removed == 0:
+            print("No inward-facing triangles to fix or duplicate triangles to remove.")
             return
 
-        kept_rows = rows[:num_tri * 3].reshape(num_tri, 3, 6)[keep_mask].reshape(-1, 6)
-        remainder = rows[num_tri * 3:]
-        if remainder.size:
-            new_rows = np.vstack([kept_rows, remainder])
-        else:
-            new_rows = kept_rows
-        verticesHolder.vertices = new_rows.astype('f4').flatten()
+        if duplicates_removed > 0:
+            print(f"Removed {duplicates_removed} duplicate triangle(s).")
+
+        verticesHolder.vertices = rows.astype('f4').flatten()
 
         # Clear selection and editing state
         self.game.selected_vertices.clear()
@@ -548,7 +607,45 @@ class EventHandler:
             self.game.current_color = self.game.random_color()
 
         self.game.renderer.renderer3D.update_vertex_buffer()
-        print(f"Removed {removed} back-facing triangle(s).")
+        print(f"Fixed winding for {flipped} inward-facing triangle(s).")
+
+    def check_selected_edge_exists(self):
+        rows = verticesHolder.vertices.reshape(-1, 6)
+        if len(self.game.selected_vertices) != 2:
+            self.game.set_status("Select exactly two vertices to check edge", 180)
+            return
+        i_a, i_b = sorted(list(self.game.selected_vertices))
+        if i_a < 0 or i_b >= len(rows):
+            self.game.set_status("Selected vertex indices out of range", 180)
+            return
+        pos_a = rows[i_a, :3]
+        pos_b = rows[i_b, :3]
+
+        def same_point(p, q, tol=1e-6):
+            return (abs(float(p[0]) - float(q[0])) <= tol and
+                    abs(float(p[1]) - float(q[1])) <= tol and
+                    abs(float(p[2]) - float(q[2])) <= tol)
+
+        highlight_indices = set()
+        num_tri = len(rows) // 3
+        found_count = 0
+        for t in range(num_tri):
+            i0 = t * 3
+            tri_positions = [rows[i0 + 0, :3], rows[i0 + 1, :3], rows[i0 + 2, :3]]
+            edges = [(0, 1), (1, 2), (2, 0)]
+            for e0, e1 in edges:
+                p = tri_positions[e0]
+                q = tri_positions[e1]
+                if (same_point(p, pos_a) and same_point(q, pos_b)) or (same_point(p, pos_b) and same_point(q, pos_a)):
+                    found_count += 1
+                    highlight_indices.update({i0 + e0, i0 + e1})
+
+        if found_count > 0:
+            self.game.yellow_highlights = highlight_indices
+            self.game.uiOverlayCreator.scroll_offset = min(highlight_indices)
+            self.game.set_status(f"Edge exists; found in {found_count} triangle edge(s)", 240)
+        else:
+            self.game.set_status("No edge exists between selected vertices", 240)
 
     def delete_selected_vertices(self):
         if not self.game.selected_vertices:
