@@ -1,5 +1,5 @@
 import numpy as np
-from moderngl import Context, TRIANGLE_STRIP, TRIANGLES, LINES
+from moderngl import Context, TRIANGLE_STRIP, TRIANGLES
 import pygame
 from pyrr import Matrix44
 
@@ -58,9 +58,8 @@ class Renderer3D:
             self.eye_position.write(eye_pos)
         
         current_vertex_count = len(verticesHolder.vertices) // 6
-        mode = LINES if self.wireframe else TRIANGLES
         if current_vertex_count > 0:
-            self.vao.render(mode=mode, vertices=current_vertex_count)
+            self.vao.render(mode=TRIANGLES, vertices=current_vertex_count)
         # When there are zero vertices, skip rendering geometry
         if self.ctx.error != 'GL_NO_ERROR':
             print("OpenGL error:")
@@ -85,3 +84,4 @@ class Renderer3D:
 
     def toggle_wireframe(self):
         self.wireframe = not self.wireframe
+        self.ctx.wireframe = self.wireframe
