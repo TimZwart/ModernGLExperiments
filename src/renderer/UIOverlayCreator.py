@@ -165,6 +165,7 @@ class UIOverlayCreator:
             f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
             f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
             f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
+            f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
             f"Pitch Up: {keybindings['pitch_up'].upper()} or Numpad 8",

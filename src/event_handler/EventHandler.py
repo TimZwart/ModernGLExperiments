@@ -35,6 +35,7 @@ class EventHandler:
             'toggle_wireframe': pygame.K_F8,
             'help': pygame.K_F1,
             'check_edge': pygame.K_F11,
+            'remove_internal_edges': pygame.K_F12,
         }
         self.rotation_speed = 0.1
 
@@ -239,6 +240,8 @@ class EventHandler:
                     self.game.help_mode = not self.game.help_mode
                 if (('check_edge' in keybindings) and event.key == pygame.key.key_code(keybindings['check_edge'])) or event.key == self.alternate_keys['check_edge']:
                     self.check_selected_edge_exists()
+                if (('remove_internal_edges' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_internal_edges'])) or event.key == self.alternate_keys['remove_internal_edges']:
+                    self.remove_internal_edges_via_raycasts()
             elif event.type == pygame.MOUSEWHEEL:
                 self.handle_scroll(event.y)
         
@@ -646,6 +649,141 @@ class EventHandler:
             self.game.set_status(f"Edge exists; found in {found_count} triangle edge(s)", 240)
         else:
             self.game.set_status("No edge exists between selected vertices", 240)
+
+    def remove_internal_edges_via_raycasts(self):
+        rows = verticesHolder.vertices.reshape(-1, 6)
+        num_rows = len(rows)
+        if num_rows < 3:
+            self.game.set_status("No triangles to process", 180)
+            return
+        num_tri = num_rows // 3
+
+        # Precompute triangle positions (float64 for robustness)
+        tri_pos = rows.reshape(num_tri, 3, 6)[:, :, :3].astype(np.float64)
+
+        # Map edges (by rounded position pairs) to triangles that contain them
+        def round_triplet(p):
+            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
+
+        edge_to_tris = {}
+        for t in range(num_tri):
+            p0, p1, p2 = tri_pos[t]
+            edges = [(p0, p1), (p1, p2), (p2, p0)]
+            for a, b in edges:
+                ra, rb = round_triplet(a), round_triplet(b)
+                key = tuple(sorted([ra, rb]))
+                edge_to_tris.setdefault(key, set()).add(t)
+
+        # Directions: 26-ish directions (axes, face diagonals, space diagonals)
+        dirs = []
+        base = [
+            (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
+            (1, 1, 0), (1, -1, 0), (-1, 1, 0), (-1, -1, 0),
+            (1, 0, 1), (1, 0, -1), (-1, 0, 1), (-1, 0, -1),
+            (0, 1, 1), (0, 1, -1), (0, -1, 1), (0, -1, -1),
+            (1, 1, 1), (1, 1, -1), (1, -1, 1), (1, -1, -1),
+            (-1, 1, 1), (-1, 1, -1), (-1, -1, 1), (-1, -1, -1),
+        ]
+        for dx, dy, dz in base:
+            v = np.array([dx, dy, dz], dtype=np.float64)
+            n = np.linalg.norm(v)
+            if n > 0:
+                dirs.append(v / n)
+        dirs = np.array(dirs)
+
+        def ray_intersects_triangle(origin, direction, v0, v1, v2, eps=1e-8):
+            # Moller-Trumbore
+            edge1 = v1 - v0
+            edge2 = v2 - v0
+            pvec = np.cross(direction, edge2)
+            det = np.dot(edge1, pvec)
+            if -eps < det < eps:
+                return False, None
+            inv_det = 1.0 / det
+            tvec = origin - v0
+            u = np.dot(tvec, pvec) * inv_det
+            if u < 0.0 - eps or u > 1.0 + eps:
+                return False, None
+            qvec = np.cross(tvec, edge1)
+            v = np.dot(direction, qvec) * inv_det
+            if v < 0.0 - eps or u + v > 1.0 + eps:
+                return False, None
+            t = np.dot(edge2, qvec) * inv_det
+            if t <= eps:
+                return False, None
+            return True, t
+
+        def edge_is_internal(pa, pb, exclude_tris:set):
+            def fmt3(p):
+                return f"({float(p[0]):.3f}, {float(p[1]):.3f}, {float(p[2]):.3f})"
+            # Sample points along the edge (avoid endpoints)
+            samples = [0.25, 0.5, 0.75]
+            for alpha in samples:
+                origin = (1.0 - alpha) * pa + alpha * pb
+                # Require a hit in every sampled direction to consider interior
+                for d in dirs:
+                    hit_any = False
+                    for t_idx in range(num_tri):
+                        if t_idx in exclude_tris:
+                            continue
+                        v0, v1, v2 = tri_pos[t_idx]
+                        hit, _ = ray_intersects_triangle(origin, d, v0, v1, v2)
+                        if hit:
+                            hit_any = True
+                            break
+                    if not hit_any:
+                        print(f"[internal-edge] ray miss for edge {fmt3(pa)} -> {fmt3(pb)} at alpha={alpha:.2f}, dir=({float(d[0]):.3f}, {float(d[1]):.3f}, {float(d[2]):.3f})")
+                        return False
+            return True
+
+        triangles_to_remove = set()
+        internal_edge_count = 0
+        # Evaluate each unique edge once
+        for key, tri_set in edge_to_tris.items():
+            ra, rb = key
+            pa = np.array(ra, dtype=np.float64)
+            pb = np.array(rb, dtype=np.float64)
+            # Skip degenerate (zero-length) edges
+            length = np.linalg.norm(pb - pa)
+            if length < 1e-9:
+                continue
+            print(f"[internal-edge] checking edge {pa[0]:.3f},{pa[1]:.3f},{pa[2]:.3f} -> {pb[0]:.3f},{pb[1]:.3f},{pb[2]:.3f}; length={length:.3f}; shared_tris={len(tri_set)}")
+            if edge_is_internal(pa, pb, tri_set):
+                internal_edge_count += 1
+                for t_idx in tri_set:
+                    triangles_to_remove.add(t_idx)
+
+        if not triangles_to_remove:
+            self.game.set_status("No internal edges found", 240)
+            return
+
+        # Remove triangles (3 rows per triangle)
+        mask = np.ones(num_rows, dtype=bool)
+        for t_idx in triangles_to_remove:
+            i0 = t_idx * 3
+            mask[i0:i0+3] = False
+        new_rows = rows[mask]
+        verticesHolder.vertices = new_rows.astype('f4').flatten()
+
+        # Reset selection/UI and keep color continuity
+        self.game.selected_vertices.clear()
+        self.game.edit_mode = False
+        self.game.edit_text = ""
+        self.game.yellow_highlights.clear()
+
+        total_vertices = len(verticesHolder.vertices) // 6
+        if total_vertices > 0:
+            if total_vertices % 3 == 0:
+                self.game.current_color = self.game.random_color()
+            else:
+                last_vertex_color = verticesHolder.vertices[-3:]
+                self.game.current_color = last_vertex_color.tolist()
+        else:
+            self.game.current_color = self.game.random_color()
+
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        removed_tris = len(triangles_to_remove)
+        self.game.set_status(f"Removed {removed_tris} triangles from {internal_edge_count} internal edge(s)", 300)
 
     def delete_selected_vertices(self):
         if not self.game.selected_vertices:
