@@ -37,8 +37,8 @@ class UIOverlayCreator:
             self.overlay.blit(status_surface, (10, 25))
         help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
         self.overlay.blit(help_prompt, (10, self.height - 110))
-        filename_text = self.font.render(f"Current file: {self.game.filename_text}", True, (255, 255, 0))
-        self.overlay.blit(filename_text, (10, self.height - 80))
+        filename_text = self.font.render(f"{self.game.filename_text}", True, (255, 255, 0))
+        self.overlay.blit(filename_text, (160, 10))
         
         # Create a clickable area for each vertex
         self.vertex_rects = []
@@ -100,9 +100,8 @@ class UIOverlayCreator:
                 err_surface = self.font.render(self.game.add_vertex_error, True, (255, 80, 80))
                 self.overlay.blit(err_surface, (15, max(0, add_rect_top - 20)))
         else:
-            add_hint = self.font.render("Add vertex: press P to enter [x, y, z]", True, (120, 120, 120))
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.add_vertex_rect, 1)
-            self.overlay.blit(add_hint, (15, add_rect_top + 5))
+            # Intentionally no hint text on main screen
 
         # Display selected vertex coordinates
         if self.game.selected_vertices:
