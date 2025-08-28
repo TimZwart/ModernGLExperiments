@@ -89,16 +89,9 @@ class EventHandler:
                         self.game.add_vertex_error = ""
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
-                    elif hasattr(self.game, 'open_rect') and self.game.open_rect and self.game.open_rect.collidepoint(x, y):
-                        self.game.filename_edit_mode = True
-                        self.game.filename_edit_purpose = 'open'
-                        self.mouse_button_rotation_held = False
-                        self.rotate_key_held = False
+                    # Disable click activation for open/save/new; use keybindings only
                     elif self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
-                        self.game.filename_edit_mode = True
-                        self.game.filename_edit_purpose = 'save'
-                        self.mouse_button_rotation_held = False
-                        self.rotate_key_held = False
+                        pass
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
                         selected = list(self.game.selected_vertices)[0]

@@ -61,35 +61,27 @@ class UIOverlayCreator:
         if total_vertices > self.scroll_offset + self.max_visible_vertices:
             pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, self.height - 85), (20, self.height - 75), (30, self.height - 85)])
 
-        # Display filename editing area (Save)
+        # Unified filename input area (Save/Open/New) at single position
         bottom_padding = 10
         rect_height = self.game.filename_rect.height
-        save_rect_top = self.height - rect_height - bottom_padding
-        self.game.filename_rect.topleft = (10, save_rect_top)
+        unified_top = self.height - rect_height - bottom_padding
+        self.game.filename_rect.topleft = (10, unified_top)
 
-        if self.game.filename_edit_mode and getattr(self.game, 'filename_edit_purpose', 'save') == 'save':
-            pygame.draw.rect(self.overlay, (0, 255, 0), self.game.filename_rect, 2)
-            filename_surface = self.font.render(self.game.filename_text, True, (0, 255, 0))
-            self.overlay.blit(filename_surface, (15, save_rect_top + 5))
+        if self.game.filename_edit_mode:
+            purpose = getattr(self.game, 'filename_edit_purpose', 'save')
+            # Color by purpose
+            color = (0, 255, 0) if purpose == 'save' else (0, 200, 255) if purpose == 'open' else (255, 200, 0)
+            pygame.draw.rect(self.overlay, color, self.game.filename_rect, 2)
+            input_surface = self.font.render(self.game.filename_text, True, color)
+            self.overlay.blit(input_surface, (15, unified_top + 5))
         else:
-            filename_display = self.font.render(f"Save to: {self.game.filename_text} (click to edit)", True, (150, 150, 150))
-            pygame.draw.rect(self.overlay, (100, 100, 100), self.game.filename_rect, 1)
-            self.overlay.blit(filename_display, (15, save_rect_top + 5))
-
-        # Open file field above Save
-        open_rect_top = save_rect_top - 35
-        self.game.open_rect.topleft = (10, open_rect_top)
-        if self.game.filename_edit_mode and getattr(self.game, 'filename_edit_purpose', 'save') == 'open':
-            pygame.draw.rect(self.overlay, (0, 200, 255), self.game.open_rect, 2)
-            open_surface = self.font.render(self.game.filename_text, True, (0, 200, 255))
-            self.overlay.blit(open_surface, (15, open_rect_top + 5))
-        else:
-            open_hint = self.font.render("Open file: press B or F3 (click to edit path)", True, (120, 120, 120))
-            pygame.draw.rect(self.overlay, (80, 80, 80), self.game.open_rect, 1)
-            self.overlay.blit(open_hint, (15, open_rect_top + 5))
-
-        # Add-vertex input field above Open
-        add_rect_top = open_rect_top - 35
+            # Only show a neutral hint for how to activate via keys; no click activation
+            purpose_hint = "F6 to Save / F3 to Open / F9 to New"
+            hint = self.font.render(purpose_hint, True, (120, 120, 120))
+            pygame.draw.rect(self.overlay, (80, 80, 80), self.game.filename_rect, 1)
+            self.overlay.blit(hint, (15, unified_top + 5))
+        # Add-vertex input field above unified area
+        add_rect_top = unified_top - 35
         self.game.add_vertex_rect.topleft = (10, add_rect_top)
         if self.game.add_vertex_mode:
             pygame.draw.rect(self.overlay, (0, 200, 255), self.game.add_vertex_rect, 2)
