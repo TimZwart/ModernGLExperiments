@@ -84,8 +84,8 @@ class EventHandler:
                     x, y = event.pos
                     if self.game.add_vertex_rect and self.game.add_vertex_rect.collidepoint(x, y):
                         self.game.add_vertex_mode = True
-                        # Prefill with a template list compatible with eval
-                        self.game.add_vertex_text = "[0.0, 0.0, 0.0]"
+                        # Prefill with last selected vertex coords if available
+                        self.game.add_vertex_text = self._get_add_vertex_default_text()
                         self.game.add_vertex_error = ""
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
@@ -108,6 +108,8 @@ class EventHandler:
                                     self.game.selected_vertices.add(nearest_vertex)
                             else:
                                 self.game.selected_vertices = {nearest_vertex}
+                            # Track the last vertex the user interacted with
+                            self.game.last_selected_vertex_index = nearest_vertex
                         else:
                             if not ctrl_pressed:
                                 self.game.selected_vertices.clear()
@@ -162,9 +164,9 @@ class EventHandler:
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
                     self.rotate_key_held = True
                 if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
-                    # Enter add-vertex input mode instead of adding at origin
+                    # Enter add-vertex input mode; prefill from last selected when possible
                     self.game.add_vertex_mode = True
-                    self.game.add_vertex_text = "[0.0, 0.0, 0.0]"
+                    self.game.add_vertex_text = self._get_add_vertex_default_text()
                     self.game.add_vertex_error = ""
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
@@ -239,6 +241,24 @@ class EventHandler:
                 self.handle_scroll(event.y)
         
         return continue_running 
+
+    def _get_add_vertex_default_text(self):
+        try:
+            idx = getattr(self.game, 'last_selected_vertex_index', None)
+            if idx is not None:
+                coords = verticesHolder.vertices[idx*6:idx*6+3]
+                if len(coords) == 3:
+                    x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
+                    return f"[{x}, {y}, {z}]"
+            if len(self.game.selected_vertices) == 1:
+                selected = next(iter(self.game.selected_vertices))
+                coords = verticesHolder.vertices[selected*6:selected*6+3]
+                if len(coords) == 3:
+                    x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
+                    return f"[{x}, {y}, {z}]"
+        except Exception:
+            pass
+        return "[0.0, 0.0, 0.0]"
 
     def find_nearest_vertex(self, x, y):
         if verticesHolder.vertices.size == 0:
@@ -371,6 +391,8 @@ class EventHandler:
                 print(f"Error clearing vertices for new file {self.game.filename_text}: {e}")
             finally:
                 self.game.filename_edit_purpose = 'save'
+                # Reset last selected vertex reference on new file
+                self.game.last_selected_vertex_index = None
         elif purpose == 'open':
             print(f"Opening file: {self.game.filename_text}")
             try:
@@ -397,6 +419,8 @@ class EventHandler:
                 print(f"Error opening {self.game.filename_text}: {e}")
             finally:
                 self.game.filename_edit_purpose = 'save'
+                # Reset last selected vertex reference on open
+                self.game.last_selected_vertex_index = None
         else:
             print(f"Save filename set to: {self.game.filename_text}")
             try:
@@ -415,6 +439,8 @@ class EventHandler:
                         self.game.selected_vertices.add(actual_index)
                 else:
                     self.game.selected_vertices = {actual_index}
+                # Track last interacted vertex from the list click
+                self.game.last_selected_vertex_index = actual_index
                 return True
         return False
 
@@ -604,6 +630,8 @@ class EventHandler:
 
         self.game.renderer.renderer3D.update_vertex_buffer()
         print(f"Fixed winding for {flipped} inward-facing triangle(s).")
+        # Clear last selected after geometry reorientation
+        self.game.last_selected_vertex_index = None
 
     def check_selected_edge_exists(self):
         rows = verticesHolder.vertices.reshape(-1, 6)
@@ -777,6 +805,8 @@ class EventHandler:
         self.game.renderer.renderer3D.update_vertex_buffer()
         removed_tris = len(triangles_to_remove)
         self.game.set_status(f"Removed {removed_tris} triangles from {internal_edge_count} internal edge(s)", 300)
+        # Clear last selected after geometry changes
+        self.game.last_selected_vertex_index = None
 
     def delete_selected_vertices(self):
         if not self.game.selected_vertices:
@@ -820,6 +850,9 @@ class EventHandler:
             self.game.renderer.renderer3D.update_vertex_buffer()
         except Exception as e:
             print(f"Error deleting vertices: {e}")
+        finally:
+            # Reset last selected after deletions
+            self.game.last_selected_vertex_index = None
 
     def clear_all_vertices(self):
         try:
@@ -834,3 +867,6 @@ class EventHandler:
             print("All vertices cleared")
         except Exception as e:
             print(f"Error clearing all vertices: {e}")
+        finally:
+            # Reset last selected on clear
+            self.game.last_selected_vertex_index = None

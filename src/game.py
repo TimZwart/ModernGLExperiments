@@ -46,6 +46,8 @@ class Game:
         self.help_mode = False
         # Transient status message shown on-screen (text, frames_remaining)
         self.status_message = ("", 0)
+        # Remember the last vertex index the user interacted with
+        self.last_selected_vertex_index = None
 
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)
