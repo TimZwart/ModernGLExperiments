@@ -26,4 +26,7 @@ if 'remove_backfaces' not in keybindings:
 # Default keybinding for edge check if not provided
 if 'check_edge' not in keybindings:
     keybindings['check_edge'] = 'f11'
+# Default keybinding for extrusion if not provided
+if 'extrude' not in keybindings:
+    keybindings['extrude'] = 'e'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

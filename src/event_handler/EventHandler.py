@@ -61,6 +61,24 @@ class EventHandler:
                         self.game.add_vertex_error = ""
                 # Swallow all other events during add-vertex edit mode
                 continue
+            # While entering extrude offset, disable all other controls except text entry and QUIT
+            if self.game.extrude_mode:
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        self.apply_extrude()
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.game.extrude_text = self.game.extrude_text[:-1]
+                        self.game.extrude_error = ""
+                    else:
+                        # Clear placeholder on first typed character
+                        if self.game.extrude_text == "[0.0, 0.0, 0.0]":
+                            self.game.extrude_text = ""
+                        self.game.extrude_text += event.unicode
+                        self.game.extrude_error = ""
+                continue
             # While editing the save filename, disable all other controls except text entry and QUIT
             if self.game.filename_edit_mode:
                 if event.type == pygame.QUIT:
@@ -92,6 +110,16 @@ class EventHandler:
                     # Disable click activation for open/save/new; use keybindings only
                     elif self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         pass
+                    elif self.game.extrude_rect and self.game.extrude_rect.collidepoint(x, y):
+                        # Activate extrude input; default to last selected coords
+                        if len(self.game.selected_vertices) == 0:
+                            self.game.set_status("Select vertices to extrude", 180)
+                        else:
+                            self.game.extrude_mode = True
+                            self.game.extrude_text = self._get_add_vertex_default_text()
+                            self.game.extrude_error = ""
+                            self.mouse_button_rotation_held = False
+                            self.rotate_key_held = False
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
                         selected = list(self.game.selected_vertices)[0]
@@ -172,6 +200,15 @@ class EventHandler:
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
                     self.save_vertices()
+                if (('extrude' in keybindings) and event.key == pygame.key.key_code(keybindings['extrude'])):
+                    if len(self.game.selected_vertices) == 0:
+                        self.game.set_status("Select vertices to extrude", 180)
+                    else:
+                        self.game.extrude_mode = True
+                        self.game.extrude_text = self._get_add_vertex_default_text()
+                        self.game.extrude_error = ""
+                        self.mouse_button_rotation_held = False
+                        self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
                     self.game.filename_edit_mode = True
                     self.game.filename_edit_purpose = 'save'
@@ -259,6 +296,35 @@ class EventHandler:
         except Exception:
             pass
         return "[0.0, 0.0, 0.0]"
+
+    def _fill_among_indices(self, indices):
+        if len(indices) < 3:
+            return
+        vertices = verticesHolder.vertices.reshape(-1, 6)
+        existing_triangles = []
+        num_tri = len(vertices) // 3
+        for t in range(num_tri):
+            tri_pos = set(tuple(vertices[t*3 + i, :3]) for i in range(3))
+            existing_triangles.append(tri_pos)
+
+        new_triangles = []
+        for comb in itertools.combinations(sorted(indices), 3):
+            pos = [tuple(vertices[i, :3]) for i in comb]
+            pos_set = set(pos)
+            if pos_set not in existing_triangles:
+                new_triangles.append(pos)
+
+        if not new_triangles:
+            return
+        new_data = []
+        for tri_pos in new_triangles:
+            new_color = self.game.random_color()
+            for pos in tri_pos:
+                new_data.extend(pos)
+                new_data.extend(new_color)
+        if new_data:
+            verticesHolder.vertices = np.append(verticesHolder.vertices, new_data).astype('f4')
+            self.game.renderer.renderer3D.update_vertex_buffer()
 
     def find_nearest_vertex(self, x, y):
         if verticesHolder.vertices.size == 0:
@@ -364,6 +430,118 @@ class EventHandler:
         verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
         self.game.renderer.renderer3D.update_vertex_buffer()
         print(f"New vertex added: {new_vertex[:3]}")
+
+    def apply_extrude(self):
+        text = (self.game.extrude_text or "").strip()
+        if text.count('[') > 1:
+            last_open = text.rfind('[')
+            last_close = text.rfind(']')
+            if last_close != -1 and last_close > last_open:
+                text = text[last_open:last_close+1]
+            else:
+                text = text[last_open:]
+        try:
+            parsed = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            self.game.extrude_error = "Invalid format. Use [x, y, z] with numbers."
+            return
+        if not (isinstance(parsed, (list, tuple)) and len(parsed) == 3):
+            self.game.extrude_error = "Enter exactly three numbers like [1.0, 2.0, 3.0]."
+            return
+        try:
+            px, py, pz = (float(parsed[0]), float(parsed[1]), float(parsed[2]))
+        except (TypeError, ValueError):
+            self.game.extrude_error = "Coordinates must be numbers."
+            return
+
+        if len(self.game.selected_vertices) == 0:
+            self.game.extrude_mode = False
+            self.game.extrude_text = ""
+            self.game.extrude_error = ""
+            return
+
+        last_idx = None
+        if self.game.last_selected_vertex_index is not None:
+            last_idx = self.game.last_selected_vertex_index
+        elif len(self.game.selected_vertices) > 0:
+            last_idx = max(self.game.selected_vertices)
+        vertices = verticesHolder.vertices.reshape(-1, 6)
+        if last_idx is None or last_idx < 0 or last_idx >= len(vertices):
+            self.game.extrude_error = "Invalid last selected vertex."
+            return
+        P = vertices[last_idx, :3].astype(float)
+        Pprime = np.array([px, py, pz], dtype=float)
+        offset = Pprime - P
+
+        selected = sorted(list(self.game.selected_vertices))
+        if not selected:
+            self.game.extrude_error = "No vertices selected."
+            return
+
+        # Copy selected to the end with translation; keep original colors for copies
+        new_rows = []
+        for i in selected:
+            pos = vertices[i, :3].astype(float) + offset
+            color = vertices[i, 3:6].astype(float)
+            new_rows.append(np.concatenate([pos, color]))
+        new_rows = np.array(new_rows, dtype=np.float32)
+
+        # Append to verticesHolder
+        if new_rows.size:
+            verticesHolder.vertices = np.append(verticesHolder.vertices, new_rows.flatten()).astype('f4')
+
+        # Build side faces between corresponding old/new vertices when possible
+        # We attempt to form triangles from quads (i,j) -> (i',j') where edges existed in selection
+        old_vertices = verticesHolder.vertices.reshape(-1, 6)
+        total_before = len(old_vertices) - len(new_rows)
+        index_map = {old_idx: total_before + k for k, old_idx in enumerate(selected)}
+
+        # For each triangle that can be formed among selected old indices, create corresponding triangles among the new indices
+        # and also create side quads split into two triangles where there is an edge in the selected set.
+        # First: fill among new copy like existing fill does
+        try:
+            self._fill_among_indices(list(index_map.values()))
+        except Exception:
+            pass
+
+        # Side faces: for each pair (a,b) of selected that formed an edge in any existing triangle among selected,
+        # connect (a,b,b',a') as two triangles.
+        rows = verticesHolder.vertices.reshape(-1, 6)
+        side_tris = []
+        sel_set = set(selected)
+        # Discover edges among selected based on proximity in triangles of the mesh
+        num_tri = len(rows) // 3
+        for t in range(num_tri):
+            i0 = t * 3
+            tri = [i0, i0+1, i0+2]
+            verts = tri
+            for e0, e1 in [(0,1),(1,2),(2,0)]:
+                a = verts[e0]
+                b = verts[e1]
+                if a in sel_set and b in sel_set:
+                    a2 = index_map.get(a)
+                    b2 = index_map.get(b)
+                    if a2 is not None and b2 is not None:
+                        side_tris.append((a, b, b2))
+                        side_tris.append((a, b2, a2))
+
+        if side_tris:
+            tri_data = []
+            for a, b, c in side_tris:
+                for idx in (a, b, c):
+                    tri_data.extend(rows[idx, :3])
+                    tri_data.extend(self.game.random_color())
+            if tri_data:
+                verticesHolder.vertices = np.append(verticesHolder.vertices, np.array(tri_data, dtype='f4')).astype('f4')
+
+        # Remove internal edges as a final cleanup
+        self.remove_internal_edges_via_raycasts()
+
+        # Done; update GPU and exit mode
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        self.game.extrude_mode = False
+        self.game.extrude_text = ""
+        self.game.extrude_error = ""
 
     def save_vertices(self):
         filename = self.game.filename_text

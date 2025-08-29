@@ -48,6 +48,11 @@ class Game:
         self.status_message = ("", 0)
         # Remember the last vertex index the user interacted with
         self.last_selected_vertex_index = None
+        # Extrusion mode input state
+        self.extrude_mode = False
+        self.extrude_text = ""
+        self.extrude_rect = pygame.Rect(370, self.height - 105, 350, 30)
+        self.extrude_error = ""
 
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)

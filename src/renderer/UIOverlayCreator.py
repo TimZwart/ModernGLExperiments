@@ -95,6 +95,18 @@ class UIOverlayCreator:
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.add_vertex_rect, 1)
             # Intentionally no hint text on main screen
 
+        # Extrude input field next to add-vertex
+        self.game.extrude_rect.top = add_rect_top
+        if self.game.extrude_mode:
+            pygame.draw.rect(self.overlay, (200, 160, 0), self.game.extrude_rect, 2)
+            extrude_surface = self.font.render(self.game.extrude_text, True, (200, 160, 0))
+            self.overlay.blit(extrude_surface, (self.game.extrude_rect.left + 5, add_rect_top + 5))
+            if getattr(self.game, 'extrude_error', ""):
+                err_surface = self.font.render(self.game.extrude_error, True, (255, 80, 80))
+                self.overlay.blit(err_surface, (self.game.extrude_rect.left, max(0, add_rect_top - 20)))
+        else:
+            pygame.draw.rect(self.overlay, (80, 80, 80), self.game.extrude_rect, 1)
+
         # Display selected vertex coordinates
         if self.game.selected_vertices:
             if len(self.game.selected_vertices) == 1:
@@ -156,7 +168,9 @@ class UIOverlayCreator:
             f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
             f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
             f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
+            "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
             f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
+            f"Extrude selected: {keybindings.get('extrude', 'e').upper()} (enter P' [x, y, z])",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
             f"Pitch Up: {keybindings['pitch_up'].upper()} or Numpad 8",
@@ -168,7 +182,7 @@ class UIOverlayCreator:
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts[:-8]:
+        for text in help_texts[:-10]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
@@ -176,7 +190,7 @@ class UIOverlayCreator:
         # Put the last eight items on a second column
         second_col_x = self.width // 2 + 20
         y2 = 20
-        for text in help_texts[-8:]:
+        for text in help_texts[-10:]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (second_col_x, y2))
             y2 += 30
