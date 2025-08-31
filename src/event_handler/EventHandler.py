@@ -496,46 +496,67 @@ class EventHandler:
         total_before = len(old_vertices) - len(new_rows)
         index_map = {old_idx: total_before + k for k, old_idx in enumerate(selected)}
 
-        # For each triangle that can be formed among selected old indices, create corresponding triangles among the new indices
-        # and also create side quads split into two triangles where there is an edge in the selected set.
-        # First: fill among new copy like existing fill does
-        try:
-            self._fill_among_indices(list(index_map.values()))
-        except Exception:
-            pass
-
-        # Side faces: for each pair (a,b) of selected that formed an edge in any existing triangle among selected,
-        # connect (a,b,b',a') as two triangles.
+        # Reuse the existing 'form triangles' logic for caps and sides
         rows = verticesHolder.vertices.reshape(-1, 6)
-        side_tris = []
-        sel_set = set(selected)
-        # Discover edges among selected based on proximity in triangles of the mesh
-        num_tri = len(rows) // 3
-        for t in range(num_tri):
-            i0 = t * 3
-            tri = [i0, i0+1, i0+2]
-            verts = tri
-            for e0, e1 in [(0,1),(1,2),(2,0)]:
-                a = verts[e0]
-                b = verts[e1]
-                if a in sel_set and b in sel_set:
-                    a2 = index_map.get(a)
-                    b2 = index_map.get(b)
-                    if a2 is not None and b2 is not None:
-                        side_tris.append((a, b, b2))
-                        side_tris.append((a, b2, a2))
+        used_fallback_for_sides = False
+        saved_selection = set(self.game.selected_vertices)
+        try:
+            # Cap the extruded copy by selecting only the new indices and forming triangles
+            new_indices = [index_map[i] for i in selected if i in index_map]
+            if len(new_indices) >= 3:
+                self.game.selected_vertices = set(new_indices)
+                self.form_triangles_from_selected()
 
-        if side_tris:
-            tri_data = []
-            for a, b, c in side_tris:
-                for idx in (a, b, c):
-                    tri_data.extend(rows[idx, :3])
-                    tri_data.extend(self.game.random_color())
-            if tri_data:
-                verticesHolder.vertices = np.append(verticesHolder.vertices, np.array(tri_data, dtype='f4')).astype('f4')
+            # Order the original selected vertices around their centroid to walk the perimeter
+            if len(selected) >= 3:
+                sel_positions = np.array([rows[i, :3].astype(float) for i in selected], dtype=np.float64)
+                centroid = sel_positions.mean(axis=0)
+                centered = sel_positions - centroid
+                if np.linalg.norm(centered) > 0:
+                    U, S, Vt = np.linalg.svd(centered, full_matrices=False)
+                    u_axis = Vt[0]
+                    v_axis = Vt[1] if Vt.shape[0] > 1 else np.array([0.0, 1.0, 0.0])
+                    proj_u = centered.dot(u_axis)
+                    proj_v = centered.dot(v_axis)
+                    pts2 = np.stack([proj_u, proj_v], axis=1)
+                    sorted_idx = sorted(range(len(pts2)), key=lambda i: (pts2[i][0], pts2[i][1]))
+                    def cross(o, a, b):
+                        return (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0])
+                    lower = []
+                    for i in sorted_idx:
+                        while len(lower) >= 2 and cross(pts2[lower[-2]], pts2[lower[-1]], pts2[i]) <= 0:
+                            lower.pop()
+                        lower.append(i)
+                    upper = []
+                    for i in reversed(sorted_idx):
+                        while len(upper) >= 2 and cross(pts2[upper[-2]], pts2[upper[-1]], pts2[i]) <= 0:
+                            upper.pop()
+                        upper.append(i)
+                    hull_idx = lower[:-1] + upper[:-1]
+                    if len(hull_idx) < 3:
+                        angles = np.arctan2(pts2[:,1], pts2[:,0])
+                        hull_idx = list(np.argsort(angles))
+                    ordered = [selected[int(k)] for k in hull_idx]
 
-        # Remove internal edges as a final cleanup
-        self.remove_internal_edges_via_raycasts()
+                    # For each edge on the perimeter, select the quad's four vertices and form triangles
+                    for i in range(len(ordered)):
+                        a = ordered[i]
+                        b = ordered[(i + 1) % len(ordered)]
+                        a2 = index_map.get(a)
+                        b2 = index_map.get(b)
+                        if a2 is None or b2 is None:
+                            continue
+                        self.game.selected_vertices = {a, b, a2, b2}
+                        self.form_triangles_from_selected()
+                    used_fallback_for_sides = True
+        finally:
+            # Restore selection
+            self.game.selected_vertices = saved_selection
+
+        # After using the generic filling, skip the raycast cleanup which can be aggressive
+        # and may remove freshly created boundary faces.
+        if not used_fallback_for_sides:
+            self.remove_internal_edges_via_raycasts()
 
         # Done; update GPU and exit mode
         self.game.renderer.renderer3D.update_vertex_buffer()
@@ -858,7 +879,12 @@ class EventHandler:
         num_tri = num_rows // 3
 
         # Precompute triangle positions (float64 for robustness)
-        tri_pos = rows.reshape(num_tri, 3, 6)[:, :, :3].astype(np.float64)
+        # Only operate on complete triangles to avoid reshape errors when rows % 3 != 0
+        tri_rows = rows[:num_tri * 3]
+        if num_tri == 0:
+            self.game.set_status("No triangles to process", 180)
+            return
+        tri_pos = tri_rows.reshape(num_tri, 3, 6)[:, :, :3].astype(np.float64)
 
         # Map edges (by rounded position pairs) to triangles that contain them
         def round_triplet(p):

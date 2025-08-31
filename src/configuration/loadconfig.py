@@ -28,5 +28,6 @@ if 'check_edge' not in keybindings:
     keybindings['check_edge'] = 'f11'
 # Default keybinding for extrusion if not provided
 if 'extrude' not in keybindings:
-    keybindings['extrude'] = 'e'
+    # Use a non-conflicting default key for extrusion
+    keybindings['extrude'] = 'y'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))
