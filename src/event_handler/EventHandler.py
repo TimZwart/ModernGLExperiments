@@ -1,4 +1,5 @@
 import pygame
+from src.event_handler.TriangleFiller import TriangleFiller
 from src.geometry.VerticesHolder import verticesHolder
 from src.geometry.loader import load_vertices_from_file
 from src.configuration.session_store import set_last_file
@@ -14,6 +15,7 @@ class EventHandler:
         self.rotation_button = mouse_rotation_button
         self.mouse_button_rotation_held = False
         self.rotate_key_held = False
+        self.triangle_filler = TriangleFiller(game)
         self.alternate_keys = {
             'forward': pygame.K_UP,
             'backward': pygame.K_DOWN,
@@ -42,6 +44,23 @@ class EventHandler:
     def handle_events(self):
         continue_running = True
         for event in pygame.event.get():
+            # Modal: Shapes input flows have precedence over other inputs except QUIT
+            if getattr(self.game, 'shapes_mode', False) and getattr(self.game, 'shape_input_mode', None) is not None:
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN:
+                        self.apply_shape_step()
+                        continue
+                    elif event.key == pygame.K_BACKSPACE:
+                        self.backspace_shape_text()
+                        continue
+                    else:
+                        self.append_shape_text(event.unicode)
+                        continue
+                # Swallow all other events while in shape entry flow
+                continue
             # While entering a new vertex's coordinates, disable all other controls except text entry and QUIT
             if self.game.add_vertex_mode:
                 if event.type == pygame.QUIT:
@@ -167,6 +186,10 @@ class EventHandler:
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
                     self.rotate_key_held = False
             elif event.type == pygame.KEYDOWN:
+                # Toggle shapes mode irrespective of other modes except text editing ones handled above
+                if event.key == pygame.key.key_code(keybindings.get('shapes_mode', 'm')):
+                    self.toggle_shapes_mode()
+                    continue
                 if self.game.filename_edit_mode:
                     if event.key == pygame.K_RETURN:
                         self.apply_filename_edit()
@@ -191,6 +214,15 @@ class EventHandler:
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
                     self.rotate_key_held = True
+                # Shape entry hotkeys only active when shapes mode is enabled
+                if getattr(self.game, 'shapes_mode', False):
+                    if event.key == pygame.key.key_code(keybindings.get('shape_rectangle', 'r')):
+                        self.start_rectangle_flow()
+                        continue
+                    if event.key == pygame.key.key_code(keybindings.get('shape_ngon', 'g')):
+                        self.start_ngon_flow()
+                        continue
+
                 if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
                     # Enter add-vertex input mode; prefill from last selected when possible
                     self.game.add_vertex_mode = True
@@ -225,7 +257,7 @@ class EventHandler:
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
-                    self.form_triangles_from_selected()
+                    self.triangle_filler.form_triangles_from_selected()
                 if (('remove_backfaces' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_backfaces'])) or event.key == self.alternate_keys['remove_backfaces']:
                     self.remove_backfacing_triangles()
                 if event.key == pygame.key.key_code(keybindings['forward']) or event.key == self.alternate_keys['forward']:
@@ -297,6 +329,153 @@ class EventHandler:
             pass
         return "[0.0, 0.0, 0.0]"
 
+    # ===================== Shapes Mode / Input Flow =====================
+    def toggle_shapes_mode(self):
+        # Exit any existing shape input flow when toggling
+        self.game.shapes_mode = not self.game.shapes_mode
+        if not self.game.shapes_mode:
+            self.cancel_shape_flow(clear_error=True)
+            self.game.set_status("Shapes Mode OFF", 120)
+        else:
+            self.cancel_shape_flow(clear_error=True)
+            self.game.set_status("Shapes Mode ON", 120)
+
+    def cancel_shape_flow(self, clear_error:bool=False):
+        self.game.shape_input_mode = None
+        self.game.shape_step = None
+        self.game.shape_primary_text = ""
+        self.game.shape_secondary_text = ""
+        if clear_error:
+            self.game.shape_error = ""
+
+    def start_rectangle_flow(self):
+        self.game.shape_input_mode = 'rectangle'
+        self.game.shape_step = 'point'
+        self.game.shape_primary_text = ""
+        self.game.shape_secondary_text = ""
+        self.game.shape_error = "Enter start point [x, y, z]"
+
+    def start_ngon_flow(self):
+        self.game.shape_input_mode = 'ngon'
+        self.game.shape_step = 'point'
+        self.game.shape_primary_text = ""
+        self.game.shape_secondary_text = ""
+        self.game.shape_error = "Enter center/start point [x, y, z]"
+
+    def backspace_shape_text(self):
+        if self.game.shape_step in ('point', 'width', 'sides'):
+            self.game.shape_primary_text = self.game.shape_primary_text[:-1]
+        elif self.game.shape_step == 'length':
+            self.game.shape_secondary_text = self.game.shape_secondary_text[:-1]
+        self.game.shape_error = ""
+
+    def append_shape_text(self, ch:str):
+        if not ch:
+            return
+        if self.game.shape_step in ('point', 'width', 'sides'):
+            self.game.shape_primary_text += ch
+        elif self.game.shape_step == 'length':
+            self.game.shape_secondary_text += ch
+        self.game.shape_error = ""
+
+    def apply_shape_step(self):
+        mode = self.game.shape_input_mode
+        step = self.game.shape_step
+        if mode is None or step is None:
+            return
+        try:
+            if step == 'point':
+                # Expect [x, y, z]
+                point = ast.literal_eval((self.game.shape_primary_text or '').strip())
+                if not (isinstance(point, (list, tuple)) and len(point) == 3):
+                    raise ValueError("Enter [x, y, z]")
+                px, py, pz = float(point[0]), float(point[1]), float(point[2])
+                self._shape_tmp_point = (px, py, pz)
+                if mode == 'rectangle':
+                    self.game.shape_step = 'width'
+                    self.game.shape_primary_text = ""
+                    self.game.shape_error = "Enter width (number)"
+                elif mode == 'ngon':
+                    self.game.shape_step = 'sides'
+                    self.game.shape_primary_text = ""
+                    self.game.shape_error = "Enter number of sides (>=3)"
+                return
+            if mode == 'rectangle':
+                if step == 'width':
+                    width = float(ast.literal_eval((self.game.shape_primary_text or '0').strip()))
+                    if not np.isfinite(width) or width <= 0:
+                        raise ValueError("Width must be > 0")
+                    self._shape_tmp_width = width
+                    self.game.shape_step = 'length'
+                    self.game.shape_secondary_text = ""
+                    self.game.shape_error = "Enter length (number)"
+                    return
+                if step == 'length':
+                    length = float(ast.literal_eval((self.game.shape_secondary_text or '0').strip()))
+                    if not np.isfinite(length) or length <= 0:
+                        raise ValueError("Length must be > 0")
+                    self._shape_tmp_length = length
+                    self._commit_rectangle()
+                    return
+            if mode == 'ngon':
+                if step == 'sides':
+                    sides_val = int(ast.literal_eval((self.game.shape_primary_text or '0').strip()))
+                    if sides_val < 3:
+                        raise ValueError("Sides must be >= 3")
+                    self._shape_tmp_sides = sides_val
+                    self._commit_ngon()
+                    return
+        except Exception as e:
+            self.game.shape_error = f"{e}"
+
+    def _commit_rectangle(self):
+        px, py, pz = self._shape_tmp_point
+        width = float(self._shape_tmp_width)
+        length = float(self._shape_tmp_length)
+        # axis-aligned rectangle in XY plane for simplicity
+        p0 = (px, py, pz)
+        p1 = (px + width, py, pz)
+        p2 = (px + width, py + length, pz)
+        p3 = (px, py + length, pz)
+        # Add as two triangles (p0,p1,p2) and (p0,p2,p3)
+        color = self.game.random_color()
+        for tri in [(p0, p1, p2), (p0, p2, p3)]:
+            for pos in tri:
+                self._append_vertex_with_color(pos, color)
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        self.game.set_status("Rectangle added", 180)
+        self.cancel_shape_flow(clear_error=True)
+
+    def _commit_ngon(self):
+        px, py, pz = self._shape_tmp_point
+        n = int(self._shape_tmp_sides)
+        # Create a unit circle polygon in XY plane centered at starting point; use radius 1.0
+        radius = 1.0
+        vertices = []
+        for k in range(n):
+            angle = 2.0 * np.pi * (k / n)
+            x = px + radius * np.cos(angle)
+            y = py + radius * np.sin(angle)
+            z = pz
+            vertices.append((x, y, z))
+        # Triangulate fan around center point (px,py,pz) forming n triangles
+        color = self.game.random_color()
+        center = (px, py, pz)
+        for k in range(n):
+            a = vertices[k]
+            b = vertices[(k + 1) % n]
+            for pos in (center, a, b):
+                self._append_vertex_with_color(pos, color)
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        self.game.set_status(f"{n}-gon added", 180)
+        self.cancel_shape_flow(clear_error=True)
+
+    def _append_vertex_with_color(self, pos_tuple, color_rgb):
+        x, y, z = float(pos_tuple[0]), float(pos_tuple[1]), float(pos_tuple[2])
+        new_vertex = [x, y, z] + list(color_rgb)
+        from src.geometry.VerticesHolder import verticesHolder
+        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
+
     def _fill_among_indices(self, indices):
         if len(indices) < 3:
             return
@@ -307,9 +486,29 @@ class EventHandler:
             tri_pos = set(tuple(vertices[t*3 + i, :3]) for i in range(3))
             existing_triangles.append(tri_pos)
 
+        # Deduplicate input indices by position (rounded) to avoid duplicates producing degenerate triangles
+        def round_triplet(p):
+            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
+
+        unique_by_pos = {}
+        for i in sorted(indices):
+            key = round_triplet(vertices[i, :3])
+            if key not in unique_by_pos:
+                unique_by_pos[key] = i
+        indices = sorted(unique_by_pos.values())
+
         new_triangles = []
         for comb in itertools.combinations(sorted(indices), 3):
             pos = [tuple(vertices[i, :3]) for i in comb]
+            # Skip degenerate triangles: duplicate positions within the triad
+            if len(set(pos)) < 3:
+                continue
+            # Skip near-zero-area triangles (collinear or extremely tiny)
+            p0 = np.array(pos[0], dtype=float)
+            p1 = np.array(pos[1], dtype=float)
+            p2 = np.array(pos[2], dtype=float)
+            if np.linalg.norm(np.cross(p1 - p0, p2 - p0)) < 1e-8:
+                continue
             pos_set = set(pos)
             if pos_set not in existing_triangles:
                 new_triangles.append(pos)
@@ -505,7 +704,7 @@ class EventHandler:
             new_indices = [index_map[i] for i in selected if i in index_map]
             if len(new_indices) >= 3:
                 self.game.selected_vertices = set(new_indices)
-                self.form_triangles_from_selected()
+                self.triangle_filler.form_triangles_from_selected()
 
             # Order the original selected vertices around their centroid to walk the perimeter
             if len(selected) >= 3:
@@ -547,7 +746,7 @@ class EventHandler:
                         if a2 is None or b2 is None:
                             continue
                         self.game.selected_vertices = {a, b, a2, b2}
-                        self.form_triangles_from_selected()
+                        self.triangle_filler.form_triangles_from_selected()
                     used_fallback_for_sides = True
         finally:
             # Restore selection
@@ -650,83 +849,6 @@ class EventHandler:
         else:  # Scroll down
             max_offset = max(0, total_vertices - self.game.uiOverlayCreator.max_visible_vertices)
             self.game.uiOverlayCreator.scroll_offset = min(max_offset, self.game.uiOverlayCreator.scroll_offset + self.game.scroll_speed) 
-
-    def form_triangles_from_selected(self):
-        if len(self.game.selected_vertices) < 3:
-            return
-
-        self.game.yellow_highlights.clear()
-
-        selected = sorted(list(self.game.selected_vertices))
-        vertices = verticesHolder.vertices.reshape(-1, 6)
-
-        existing_triangles = []
-        num_tri = len(vertices) // 3
-        for t in range(num_tri):
-            tri_pos = set(tuple(vertices[t*3 + i, :3]) for i in range(3))
-            existing_triangles.append(tri_pos)
-
-        new_triangles = []
-        duplicate_triangle_indices = []
-        for comb in itertools.combinations(selected, 3):
-            pos = [tuple(vertices[i, :3]) for i in comb]
-            pos_set = set(pos)
-            if pos_set not in existing_triangles:
-                new_triangles.append(pos)
-            else:
-                t = existing_triangles.index(pos_set)
-                duplicate_triangle_indices.append(t)
-
-        if duplicate_triangle_indices:
-            highlighted_vertices = set()
-            for t in duplicate_triangle_indices:
-                highlighted_vertices.update([t*3, t*3+1, t*3+2])
-            self.game.yellow_highlights = highlighted_vertices
-
-            min_vertex = min(highlighted_vertices)
-            self.game.uiOverlayCreator.scroll_offset = min_vertex
-
-        # Object-centric orientation: outward is away from object bounding-box center
-        all_positions = verticesHolder.vertices.reshape(-1, 6)[:, :3]
-        if len(all_positions) > 0:
-            mins = np.min(all_positions, axis=0)
-            maxs = np.max(all_positions, axis=0)
-            object_center = (mins + maxs) * 0.5
-        else:
-            object_center = np.array([0.0, 0.0, 0.0])
-
-        def is_outward(p0, p1, p2):
-            p0 = np.array(p0, dtype=float)
-            p1 = np.array(p1, dtype=float)
-            p2 = np.array(p2, dtype=float)
-            normal = np.cross(p1 - p0, p2 - p0)
-            norm_len = np.linalg.norm(normal)
-            if norm_len == 0:
-                return False
-            tri_center = (p0 + p1 + p2) / 3.0
-            from_object_center = tri_center - object_center
-            dot = float(np.dot(normal, from_object_center))
-            # Tolerance to avoid flipping near-zero ambiguous cases
-            eps = 1e-8 * (np.linalg.norm(from_object_center) * norm_len + 1.0)
-            return dot >= -eps
-
-        new_data = []
-        flipped_count = 0
-        for tri_pos in new_triangles:
-            # Ensure outward orientation by flipping winding if needed
-            if not is_outward(tri_pos[0], tri_pos[1], tri_pos[2]):
-                tri_pos = [tri_pos[0], tri_pos[2], tri_pos[1]]
-                flipped_count += 1
-            new_color = self.game.random_color()
-            for pos in tri_pos:
-                new_data.extend(pos)
-                new_data.extend(new_color)
-
-        if new_data:
-            verticesHolder.vertices = np.append(verticesHolder.vertices, new_data).astype('f4')
-            self.game.renderer.renderer3D.update_vertex_buffer() 
-        if flipped_count:
-            print(f"Flipped winding for {flipped_count} triangle(s) during fill to face outward.")
 
     def remove_backfacing_triangles(self):
         vertices = verticesHolder.vertices

@@ -107,6 +107,33 @@ class UIOverlayCreator:
         else:
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.extrude_rect, 1)
 
+        # Shapes mode banner and inputs
+        if getattr(self.game, 'shapes_mode', False):
+            banner = self.font.render("Shapes Mode", True, (0, 255, 180))
+            self.overlay.blit(banner, (self.game.extrude_rect.left, add_rect_top - 30))
+
+            # Primary field
+            self.game.shape_primary_rect.top = add_rect_top
+            pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_primary_rect, 2 if self.game.shape_input_mode else 1)
+            primary_label = "Point [x, y, z]" if self.game.shape_step in (None, 'point') else ("Width" if self.game.shape_step == 'width' else ("Sides" if self.game.shape_step == 'sides' else ""))
+            primary_text = self.game.shape_primary_text if self.game.shape_primary_text else primary_label
+            primary_surface = self.font.render(primary_text, True, (0, 255, 180))
+            self.overlay.blit(primary_surface, (self.game.shape_primary_rect.left + 5, add_rect_top + 5))
+
+            # Secondary field only for rectangle width/length or after point for length
+            self.game.shape_secondary_rect.top = add_rect_top
+            show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step in ('width', 'length'))
+            if show_secondary:
+                pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_secondary_rect, 2)
+                secondary_label = "Length" if self.game.shape_step == 'length' else ""
+                secondary_text = self.game.shape_secondary_text if self.game.shape_secondary_text else secondary_label
+                secondary_surface = self.font.render(secondary_text, True, (0, 255, 180))
+                self.overlay.blit(secondary_surface, (self.game.shape_secondary_rect.left + 5, add_rect_top + 5))
+
+            if getattr(self.game, 'shape_error', ""):
+                err_surface = self.font.render(self.game.shape_error, True, (255, 80, 80))
+                self.overlay.blit(err_surface, (self.game.shape_primary_rect.left, max(0, add_rect_top - 20)))
+
         # Display selected vertex coordinates
         if self.game.selected_vertices:
             if len(self.game.selected_vertices) == 1:
@@ -165,7 +192,7 @@ class UIOverlayCreator:
             f"Change Filename: {keybindings['change_filename'].upper()} or F6",
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
             f"Open File: {keybindings.get('open_file', 'b').upper()} or F3",
-            f"Form Triangles: {keybindings['form_triangles'].upper()} or F7",
+            f"Fill with triangles between selected points: {keybindings['form_triangles'].upper()} or F7",
             f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
             f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
             "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
@@ -178,6 +205,10 @@ class UIOverlayCreator:
             f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
+            # Shapes mode help
+            f"Toggle Shapes Mode: {keybindings.get('shapes_mode', 'm').upper()}",
+            f"Rectangle (in Shapes Mode): {keybindings.get('shape_rectangle', 'r').upper()} (point, width, length)",
+            f"Regular N-gon (in Shapes Mode): {keybindings.get('shape_ngon', 'g').upper()} (point, sides)",
             "Edit selected vertex: click its line or red box, then type [x, y, z], Enter to apply",
             "Press H or F1 again to close help",
         ]

@@ -54,6 +54,19 @@ class Game:
         self.extrude_rect = pygame.Rect(370, self.height - 105, 350, 30)
         self.extrude_error = ""
 
+        # Shapes mode and input state
+        self.shapes_mode = False
+        # None | 'rectangle' | 'ngon'
+        self.shape_input_mode = None
+        # Steps within a given shape flow, e.g. 'point', 'width', 'length', 'sides'
+        self.shape_step = None
+        self.shape_primary_text = ""
+        self.shape_secondary_text = ""
+        self.shape_error = ""
+        # UI rects for shape input fields (placed to the right of extrude)
+        self.shape_primary_rect = pygame.Rect(730, self.height - 105, 300, 30)
+        self.shape_secondary_rect = pygame.Rect(1040, self.height - 105, 220, 30)
+
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)
 

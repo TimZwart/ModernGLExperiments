@@ -30,4 +30,14 @@ if 'check_edge' not in keybindings:
 if 'extrude' not in keybindings:
     # Use a non-conflicting default key for extrusion
     keybindings['extrude'] = 'y'
+# Shapes mode and shape entry defaults if not provided
+if 'shapes_mode' not in keybindings:
+    # Toggle shapes mode on/off
+    keybindings['shapes_mode'] = 'm'
+if 'shape_rectangle' not in keybindings:
+    # Start rectangle entry (allowed to overlap with other keys; only active in shapes mode)
+    keybindings['shape_rectangle'] = 'r'
+if 'shape_ngon' not in keybindings:
+    # Start regular n-gon entry (allowed to overlap with other keys; only active in shapes mode)
+    keybindings['shape_ngon'] = 'g'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))
