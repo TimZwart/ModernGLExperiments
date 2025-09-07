@@ -25,7 +25,10 @@ class UIOverlayCreator:
         # Clear the overlay
         self.overlay.fill((0, 0, 0, 0))
         if self.game.help_mode:
-            self.draw_help_screen()
+            if getattr(self.game, 'shapes_mode', False):
+                self.draw_shapes_help_screen()
+            else:
+                self.draw_help_screen()
             return
         # Render text on the overlay
         debug_text = self.font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
@@ -112,27 +115,34 @@ class UIOverlayCreator:
             banner = self.font.render("Shapes Mode", True, (0, 255, 180))
             self.overlay.blit(banner, (self.game.extrude_rect.left, add_rect_top - 30))
 
-            # Primary field
-            self.game.shape_primary_rect.top = add_rect_top
+            # Place shape inputs on a row above the bottom inputs to ensure visibility on 800x600
+            row_y = add_rect_top - 35
+
+            # Primary field: clamp inside screen horizontally
+            self.game.shape_primary_rect.top = row_y
+            self.game.shape_primary_rect.left = max(10, min(self.game.shape_primary_rect.left, self.width - self.game.shape_primary_rect.width - 10))
             pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_primary_rect, 2 if self.game.shape_input_mode else 1)
             primary_label = "Point [x, y, z]" if self.game.shape_step in (None, 'point') else ("Width" if self.game.shape_step == 'width' else ("Sides" if self.game.shape_step == 'sides' else ""))
             primary_text = self.game.shape_primary_text if self.game.shape_primary_text else primary_label
             primary_surface = self.font.render(primary_text, True, (0, 255, 180))
-            self.overlay.blit(primary_surface, (self.game.shape_primary_rect.left + 5, add_rect_top + 5))
+            self.overlay.blit(primary_surface, (self.game.shape_primary_rect.left + 5, row_y + 5))
 
-            # Secondary field only for rectangle width/length or after point for length
-            self.game.shape_secondary_rect.top = add_rect_top
-            show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step in ('width', 'length'))
+            # Secondary field: used during rectangle length step; position to the right of extrude, clamped
+            self.game.shape_secondary_rect.top = row_y
+            self.game.shape_secondary_rect.left = max(10, min(self.game.extrude_rect.left, self.width - self.game.shape_secondary_rect.width - 10))
+            show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step == 'length')
+            #show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step in ('width', 'length'))
             if show_secondary:
                 pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_secondary_rect, 2)
-                secondary_label = "Length" if self.game.shape_step == 'length' else ""
+                secondary_label = "Length"
+                #secondary_label = "Length" if self.game.shape_step == 'length' else ""
                 secondary_text = self.game.shape_secondary_text if self.game.shape_secondary_text else secondary_label
                 secondary_surface = self.font.render(secondary_text, True, (0, 255, 180))
-                self.overlay.blit(secondary_surface, (self.game.shape_secondary_rect.left + 5, add_rect_top + 5))
+                self.overlay.blit(secondary_surface, (self.game.shape_secondary_rect.left + 5, row_y + 5))
 
             if getattr(self.game, 'shape_error', ""):
                 err_surface = self.font.render(self.game.shape_error, True, (255, 80, 80))
-                self.overlay.blit(err_surface, (self.game.shape_primary_rect.left, max(0, add_rect_top - 20)))
+                self.overlay.blit(err_surface, (self.game.shape_primary_rect.left, max(0, row_y - 20)))
 
         # Display selected vertex coordinates
         if self.game.selected_vertices:
@@ -205,15 +215,12 @@ class UIOverlayCreator:
             f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
-            # Shapes mode help
-            f"Toggle Shapes Mode: {keybindings.get('shapes_mode', 'm').upper()}",
-            f"Rectangle (in Shapes Mode): {keybindings.get('shape_rectangle', 'r').upper()} (point, width, length)",
-            f"Regular N-gon (in Shapes Mode): {keybindings.get('shape_ngon', 'g').upper()} (point, sides)",
+            f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
             "Edit selected vertex: click its line or red box, then type [x, y, z], Enter to apply",
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts[:-10]:
+        for text in help_texts[:-11]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
@@ -221,7 +228,24 @@ class UIOverlayCreator:
         # Put the last eight items on a second column
         second_col_x = self.width // 2 + 20
         y2 = 20
-        for text in help_texts[-10:]:
+        for text in help_texts[-11:]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (second_col_x, y2))
             y2 += 30
+
+    def draw_shapes_help_screen(self):
+        font = pygame.font.Font(None, 24)
+        texts = [
+            "Shapes Mode:",
+            f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
+            f"Rectangle: {keybindings.get('shape_rectangle', 'r').upper()} — enter [x, y, z], width, length",
+            f"Regular N-gon: {keybindings.get('shape_ngon', 'g').upper()} — enter [x, y, z], sides (>=3)",
+            "Confirm current field: Enter",
+            "Edit current field: Backspace",
+            f"Help: {keybindings['help'].upper()} or F1 to close",
+        ]
+        y = 20
+        for text in texts:
+            surf = font.render(text, True, (255, 255, 255))
+            self.overlay.blit(surf, (20, y))
+            y += 30

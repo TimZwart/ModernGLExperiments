@@ -50,6 +50,10 @@ class EventHandler:
                     continue_running = False
                     continue
                 if event.type == pygame.KEYDOWN:
+                    # Allow help key during shape input flow to toggle shapes help screen
+                    if (event.key == pygame.key.key_code(keybindings['help'])) or (event.key == self.alternate_keys['help']):
+                        self.game.help_mode = not self.game.help_mode
+                        continue
                     if event.key == pygame.K_RETURN:
                         self.apply_shape_step()
                         continue
