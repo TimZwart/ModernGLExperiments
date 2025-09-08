@@ -38,8 +38,7 @@ class UIOverlayCreator:
         if msg_frames > 0 and msg_text:
             status_surface = self.font.render(msg_text, True, (0, 255, 0))
             self.overlay.blit(status_surface, (10, 25))
-        help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
-        self.overlay.blit(help_prompt, (10, self.height - 110))
+        # Help prompt will be drawn later, after layout calculations, to avoid overlap with shapes inputs
         filename_text = self.font.render(f"{self.game.filename_text}", True, (255, 255, 0))
         self.overlay.blit(filename_text, (160, 10))
         
@@ -113,23 +112,26 @@ class UIOverlayCreator:
         # Shapes mode banner and inputs
         if getattr(self.game, 'shapes_mode', False):
             banner = self.font.render("Shapes Mode", True, (0, 255, 180))
-            self.overlay.blit(banner, (self.game.extrude_rect.left, add_rect_top - 30))
+            # Place banner slightly below the shapes input row to avoid overlap with input text
+            self.overlay.blit(banner, (self.game.extrude_rect.left, (add_rect_top - 35) + 30))
 
             # Place shape inputs on a row above the bottom inputs to ensure visibility on 800x600
             row_y = add_rect_top - 35
 
-            # Primary field: clamp inside screen horizontally
+            # Primary field: fixed at left margin to avoid overlap on 800x600
             self.game.shape_primary_rect.top = row_y
-            self.game.shape_primary_rect.left = max(10, min(self.game.shape_primary_rect.left, self.width - self.game.shape_primary_rect.width - 10))
+            self.game.shape_primary_rect.left = 10
             pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_primary_rect, 2 if self.game.shape_input_mode else 1)
             primary_label = "Point [x, y, z]" if self.game.shape_step in (None, 'point') else ("Width" if self.game.shape_step == 'width' else ("Sides" if self.game.shape_step == 'sides' else ""))
             primary_text = self.game.shape_primary_text if self.game.shape_primary_text else primary_label
             primary_surface = self.font.render(primary_text, True, (0, 255, 180))
             self.overlay.blit(primary_surface, (self.game.shape_primary_rect.left + 5, row_y + 5))
 
-            # Secondary field: used during rectangle length step; position to the right of extrude, clamped
+            # Secondary field (Length): position to the right of primary with a gap, clamped within screen
             self.game.shape_secondary_rect.top = row_y
-            self.game.shape_secondary_rect.left = max(10, min(self.game.extrude_rect.left, self.width - self.game.shape_secondary_rect.width - 10))
+            desired_left = self.game.shape_primary_rect.left + self.game.shape_primary_rect.width + 20
+            max_left = self.width - self.game.shape_secondary_rect.width - 10
+            self.game.shape_secondary_rect.left = max(10, min(desired_left, max_left))
             show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step == 'length')
             #show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step in ('width', 'length'))
             if show_secondary:
@@ -143,6 +145,14 @@ class UIOverlayCreator:
             if getattr(self.game, 'shape_error', ""):
                 err_surface = self.font.render(self.game.shape_error, True, (255, 80, 80))
                 self.overlay.blit(err_surface, (self.game.shape_primary_rect.left, max(0, row_y - 20)))
+
+            # Place help prompt further above shapes row to avoid overlap with error text
+            help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
+            self.overlay.blit(help_prompt, (10, max(10, row_y - 50)))
+        else:
+            # Default help prompt position when not in shapes mode
+            help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
+            self.overlay.blit(help_prompt, (10, self.height - 110))
 
         # Display selected vertex coordinates
         if self.game.selected_vertices:
