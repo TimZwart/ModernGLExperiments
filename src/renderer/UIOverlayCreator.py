@@ -77,11 +77,8 @@ class UIOverlayCreator:
             input_surface = self.font.render(self.game.filename_text, True, color)
             self.overlay.blit(input_surface, (15, unified_top + 5))
         else:
-            # Only show a neutral hint for how to activate via keys; no click activation
-            purpose_hint = "F6 to Save / F3 to Open / F9 to New"
-            hint = self.font.render(purpose_hint, True, (120, 120, 120))
+            # No hint text; covered by help screen
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.filename_rect, 1)
-            self.overlay.blit(hint, (15, unified_top + 5))
         # Add-vertex input field above unified area
         add_rect_top = unified_top - 35
         self.game.add_vertex_rect.topleft = (10, add_rect_top)
@@ -118,33 +115,33 @@ class UIOverlayCreator:
             # Place shape inputs on a row above the bottom inputs to ensure visibility on 800x600
             row_y = add_rect_top - 35
 
-            # Primary field: fixed at left margin to avoid overlap on 800x600
-            self.game.shape_primary_rect.top = row_y
-            self.game.shape_primary_rect.left = 10
-            pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_primary_rect, 2 if self.game.shape_input_mode else 1)
-            primary_label = "Point [x, y, z]" if self.game.shape_step in (None, 'point') else ("Width" if self.game.shape_step == 'width' else ("Sides" if self.game.shape_step == 'sides' else ""))
-            primary_text = self.game.shape_primary_text if self.game.shape_primary_text else primary_label
-            primary_surface = self.font.render(primary_text, True, (0, 255, 180))
-            self.overlay.blit(primary_surface, (self.game.shape_primary_rect.left + 5, row_y + 5))
+            # Only show shape input fields after a shape flow has started
+            if getattr(self.game, 'shape_input_mode', None) is not None:
+                # Primary field: fixed at left margin to avoid overlap on 800x600
+                self.game.shape_primary_rect.top = row_y
+                self.game.shape_primary_rect.left = 10
+                pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_primary_rect, 2)
+                primary_label = "Point [x, y, z]" if self.game.shape_step in (None, 'point') else ("Width" if self.game.shape_step == 'width' else ("Sides" if self.game.shape_step == 'sides' else ""))
+                primary_text = self.game.shape_primary_text if self.game.shape_primary_text else primary_label
+                primary_surface = self.font.render(primary_text, True, (0, 255, 180))
+                self.overlay.blit(primary_surface, (self.game.shape_primary_rect.left + 5, row_y + 5))
 
-            # Secondary field (Length): position to the right of primary with a gap, clamped within screen
-            self.game.shape_secondary_rect.top = row_y
-            desired_left = self.game.shape_primary_rect.left + self.game.shape_primary_rect.width + 20
-            max_left = self.width - self.game.shape_secondary_rect.width - 10
-            self.game.shape_secondary_rect.left = max(10, min(desired_left, max_left))
-            show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step == 'length')
-            #show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step in ('width', 'length'))
-            if show_secondary:
-                pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_secondary_rect, 2)
-                secondary_label = "Length"
-                #secondary_label = "Length" if self.game.shape_step == 'length' else ""
-                secondary_text = self.game.shape_secondary_text if self.game.shape_secondary_text else secondary_label
-                secondary_surface = self.font.render(secondary_text, True, (0, 255, 180))
-                self.overlay.blit(secondary_surface, (self.game.shape_secondary_rect.left + 5, row_y + 5))
+                # Secondary field (Length): position to the right of primary with a gap, clamped within screen
+                self.game.shape_secondary_rect.top = row_y
+                desired_left = self.game.shape_primary_rect.left + self.game.shape_primary_rect.width + 20
+                max_left = self.width - self.game.shape_secondary_rect.width - 10
+                self.game.shape_secondary_rect.left = max(10, min(desired_left, max_left))
+                show_secondary = (self.game.shape_input_mode == 'rectangle' and self.game.shape_step == 'length')
+                if show_secondary:
+                    pygame.draw.rect(self.overlay, (0, 255, 180), self.game.shape_secondary_rect, 2)
+                    secondary_label = "Length"
+                    secondary_text = self.game.shape_secondary_text if self.game.shape_secondary_text else secondary_label
+                    secondary_surface = self.font.render(secondary_text, True, (0, 255, 180))
+                    self.overlay.blit(secondary_surface, (self.game.shape_secondary_rect.left + 5, row_y + 5))
 
-            if getattr(self.game, 'shape_error', ""):
-                err_surface = self.font.render(self.game.shape_error, True, (255, 80, 80))
-                self.overlay.blit(err_surface, (self.game.shape_primary_rect.left, max(0, row_y - 20)))
+                if getattr(self.game, 'shape_error', ""):
+                    err_surface = self.font.render(self.game.shape_error, True, (255, 80, 80))
+                    self.overlay.blit(err_surface, (self.game.shape_primary_rect.left, max(0, row_y - 20)))
 
             # Place help prompt further above shapes row to avoid overlap with error text
             help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
