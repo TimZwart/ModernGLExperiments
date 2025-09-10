@@ -42,26 +42,28 @@ class UIOverlayCreator:
         filename_text = self.font.render(f"{self.game.filename_text}", True, (255, 255, 0))
         self.overlay.blit(filename_text, (160, 10))
         
-        # Create a clickable area for each vertex
+        # Create a clickable area for each vertex (hidden while in shapes mode)
         self.vertex_rects = []
         total_vertices = len(verticesHolder.vertices) // 6
-        for i in range(self.scroll_offset, min(self.scroll_offset + self.max_visible_vertices, total_vertices)):
-            vertex_text = f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}"
-            color = (255, 255, 0) if i in self.game.yellow_highlights else (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
-            text_surface = self.font.render(vertex_text, True, color)
-            y_position = 40 + (i - self.scroll_offset) * 30
-            self.overlay.blit(text_surface, (10, y_position))
-            
-            # Create a clickable area for each vertex
-            vertex_rect = self.get_vertex_rect(i, y_position)
-            self.vertex_rects.append((i, vertex_rect))
-            pygame.draw.rect(self.overlay, (100, 100, 100), vertex_rect, 1)
+        if not getattr(self.game, 'shapes_mode', False):
+            for i in range(self.scroll_offset, min(self.scroll_offset + self.max_visible_vertices, total_vertices)):
+                vertex_text = f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}"
+                color = (255, 255, 0) if i in self.game.yellow_highlights else (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
+                text_surface = self.font.render(vertex_text, True, color)
+                y_position = 40 + (i - self.scroll_offset) * 30
+                self.overlay.blit(text_surface, (10, y_position))
+                
+                # Create a clickable area for each vertex
+                vertex_rect = self.get_vertex_rect(i, y_position)
+                self.vertex_rects.append((i, vertex_rect))
+                pygame.draw.rect(self.overlay, (100, 100, 100), vertex_rect, 1)
 
         # Draw scroll indicators if necessary
-        if self.scroll_offset > 0:
-            pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, 35), (20, 25), (30, 35)])
-        if total_vertices > self.scroll_offset + self.max_visible_vertices:
-            pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, self.height - 85), (20, self.height - 75), (30, self.height - 85)])
+        if not getattr(self.game, 'shapes_mode', False):
+            if self.scroll_offset > 0:
+                pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, 35), (20, 25), (30, 35)])
+            if total_vertices > self.scroll_offset + self.max_visible_vertices:
+                pygame.draw.polygon(self.overlay, (255, 255, 255), [(10, self.height - 85), (20, self.height - 75), (30, self.height - 85)])
 
         # Unified filename input area (Save/Open/New) at single position
         bottom_padding = 10

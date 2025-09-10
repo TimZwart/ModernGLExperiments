@@ -349,14 +349,47 @@ class EventHandler:
         self.game.shape_step = None
         self.game.shape_primary_text = ""
         self.game.shape_secondary_text = ""
+        # Clear any temporary state for shapes
+        for attr in ("_shape_tmp_point", "_shape_tmp_width", "_shape_tmp_length", "_shape_tmp_sides",
+                     "_shape_tmp_dim", "_shape_tmp_direction_point", "_shape_two_vertices_mode",
+                     "_shape_edge_p0", "_shape_edge_p1"):
+            if hasattr(self, attr):
+                try:
+                    delattr(self, attr)
+                except Exception:
+                    pass
+        # Clear shape-specific highlights
+        try:
+            self.game.yellow_highlights.clear()
+        except Exception:
+            pass
         if clear_error:
             self.game.shape_error = ""
 
     def start_rectangle_flow(self):
         self.game.shape_input_mode = 'rectangle'
-        self.game.shape_step = 'point'
         self.game.shape_primary_text = ""
         self.game.shape_secondary_text = ""
+        vertices = verticesHolder.vertices.reshape(-1, 6)
+        if len(self.game.selected_vertices) == 2 and len(vertices) > 0:
+            # Two-vertex rectangle mode
+            i_a, i_b = sorted(list(self.game.selected_vertices))
+            if 0 <= i_a < len(vertices) and 0 <= i_b < len(vertices):
+                p0 = vertices[i_a, :3].astype(float)
+                p1 = vertices[i_b, :3].astype(float)
+                self._shape_edge_p0 = p0
+                self._shape_edge_p1 = p1
+                self._shape_two_vertices_mode = True
+                self.game.shape_step = 'dimension'
+                # Highlight base vertex (first of the two) and show its coordinates in the prompt for context
+                self._shape_base_index = i_a
+                self.game.yellow_highlights = {i_a}
+                bx, by, bz = float(p0[0]), float(p0[1]), float(p0[2])
+                self.game.shape_error = f"Enter other dimension (number). Base: [{bx:.3f}, {by:.3f}, {bz:.3f}]"
+                return
+        # Default single-point rectangle mode
+        self._shape_two_vertices_mode = False
+        self.game.shape_step = 'point'
         self.game.shape_error = "Enter start point [x, y, z]"
 
     def start_ngon_flow(self):
@@ -367,7 +400,7 @@ class EventHandler:
         self.game.shape_error = "Enter center/start point [x, y, z]"
 
     def backspace_shape_text(self):
-        if self.game.shape_step in ('point', 'width', 'sides'):
+        if self.game.shape_step in ('point', 'width', 'sides', 'dimension', 'direction'):
             self.game.shape_primary_text = self.game.shape_primary_text[:-1]
         elif self.game.shape_step == 'length':
             self.game.shape_secondary_text = self.game.shape_secondary_text[:-1]
@@ -376,7 +409,7 @@ class EventHandler:
     def append_shape_text(self, ch:str):
         if not ch:
             return
-        if self.game.shape_step in ('point', 'width', 'sides'):
+        if self.game.shape_step in ('point', 'width', 'sides', 'dimension', 'direction'):
             self.game.shape_primary_text += ch
         elif self.game.shape_step == 'length':
             self.game.shape_secondary_text += ch
@@ -405,8 +438,34 @@ class EventHandler:
                     self.game.shape_error = "Enter number of sides (>=3)"
                 return
             if mode == 'rectangle':
+                # Two-vertex flow: dimension -> direction
+                if getattr(self, '_shape_two_vertices_mode', False):
+                    if step == 'dimension':
+                        dim = self._parse_number(self.game.shape_primary_text)
+                        if not np.isfinite(dim) or dim <= 0:
+                            raise ValueError("Dimension must be > 0")
+                        self._shape_tmp_dim = dim
+                        self.game.shape_step = 'direction'
+                        self.game.shape_primary_text = ""
+                        # Keep highlighting base vertex and include its coords in prompt
+                        try:
+                            bx, by, bz = float(self._shape_edge_p0[0]), float(self._shape_edge_p0[1]), float(self._shape_edge_p0[2])
+                            self.game.shape_error = f"Enter direction point [x, y, z]. Base: [{bx:.3f}, {by:.3f}, {bz:.3f}]"
+                            self.game.yellow_highlights = {getattr(self, '_shape_base_index', None)} if hasattr(self, '_shape_base_index') else self.game.yellow_highlights
+                        except Exception:
+                            self.game.shape_error = "Enter direction point [x, y, z]"
+                        return
+                    if step == 'direction':
+                        point = ast.literal_eval((self.game.shape_primary_text or '').strip())
+                        if not (isinstance(point, (list, tuple)) and len(point) == 3):
+                            raise ValueError("Enter [x, y, z]")
+                        pdx, pdy, pdz = float(point[0]), float(point[1]), float(point[2])
+                        self._shape_tmp_direction_point = np.array([pdx, pdy, pdz], dtype=float)
+                        self._commit_rectangle_from_two_vertices()
+                        return
+                # Single-point flow: width -> length
                 if step == 'width':
-                    width = float(ast.literal_eval((self.game.shape_primary_text or '0').strip()))
+                    width = self._parse_number(self.game.shape_primary_text)
                     if not np.isfinite(width) or width <= 0:
                         raise ValueError("Width must be > 0")
                     self._shape_tmp_width = width
@@ -415,7 +474,7 @@ class EventHandler:
                     self.game.shape_error = "Enter length (number)"
                     return
                 if step == 'length':
-                    length = float(ast.literal_eval((self.game.shape_secondary_text or '0').strip()))
+                    length = self._parse_number(self.game.shape_secondary_text)
                     if not np.isfinite(length) or length <= 0:
                         raise ValueError("Length must be > 0")
                     self._shape_tmp_length = length
@@ -479,6 +538,72 @@ class EventHandler:
         new_vertex = [x, y, z] + list(color_rgb)
         from src.geometry.VerticesHolder import verticesHolder
         verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
+
+    def _parse_number(self, text_value:str) -> float:
+        s = (text_value or '').strip()
+        # Accept bare numbers like 10 or 10.5
+        try:
+            val = ast.literal_eval(s)
+            if isinstance(val, (int, float)):
+                return float(val)
+        except Exception:
+            pass
+        try:
+            return float(s)
+        except Exception:
+            raise ValueError("Enter a numeric value (e.g., 10 or 10.5)")
+
+    def _commit_rectangle_from_two_vertices(self):
+        try:
+            p0 = np.array(self._shape_edge_p0, dtype=float)
+            p1 = np.array(self._shape_edge_p1, dtype=float)
+            dim = float(self._shape_tmp_dim)
+            dir_pt = np.array(self._shape_tmp_direction_point, dtype=float)
+        except Exception:
+            self.game.shape_error = "Invalid temporary state for rectangle"
+            return
+
+        e = p1 - p0
+        e_len2 = float(np.dot(e, e))
+        if e_len2 <= 1e-12:
+            self.game.shape_error = "Selected edge too small"
+            return
+
+        # Vector from p0 towards direction point, remove component along edge to get perpendicular in plane
+        v = dir_pt - p0
+        proj_scale = float(np.dot(v, e)) / e_len2
+        d_perp = v - proj_scale * e
+        if np.linalg.norm(d_perp) <= 1e-9:
+            # Direction is colinear with the edge; abort with clear error instead of guessing
+            self.game.shape_error = "Direction point is colinear with the selected edge; pick a non-colinear point"
+            return
+
+        d_perp_norm = np.linalg.norm(d_perp)
+        if d_perp_norm <= 1e-12:
+            self.game.shape_error = "Could not determine perpendicular direction"
+            return
+
+        # Normalize d_perp and scale by requested dimension
+        offset = (dim / d_perp_norm) * d_perp
+
+        q0 = p0
+        q1 = p1
+        q2 = p1 + offset
+        q3 = p0 + offset
+
+        color = self.game.random_color()
+        # Two triangles (q0, q1, q2) and (q0, q2, q3)
+        self._append_vertex_with_color(q0, color)
+        self._append_vertex_with_color(q1, color)
+        self._append_vertex_with_color(q2, color)
+        self._append_vertex_with_color(q0, color)
+        self._append_vertex_with_color(q2, color)
+        self._append_vertex_with_color(q3, color)
+
+        # Ensure new vertices are float32 and update buffer
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        self.game.set_status("Rectangle added (from 2 vertices)", 180)
+        self.cancel_shape_flow(clear_error=True)
 
     def _fill_among_indices(self, indices):
         if len(indices) < 3:
