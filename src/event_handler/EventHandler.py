@@ -54,6 +54,10 @@ class EventHandler:
                     if (event.key == pygame.key.key_code(keybindings['help'])) or (event.key == self.alternate_keys['help']):
                         self.game.help_mode = not self.game.help_mode
                         continue
+                    if event.key == pygame.K_ESCAPE:
+                        # Abort current shape input flow, remain in shapes mode
+                        self.cancel_shape_flow(clear_error=True)
+                        continue
                     if event.key == pygame.K_RETURN:
                         self.apply_shape_step()
                         continue
@@ -71,6 +75,12 @@ class EventHandler:
                     continue_running = False
                     continue
                 if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        # Cancel add-vertex mode
+                        self.game.add_vertex_mode = False
+                        self.game.add_vertex_text = ""
+                        self.game.add_vertex_error = ""
+                        continue
                     if event.key == pygame.K_RETURN:
                         self.apply_add_vertex()
                     elif event.key == pygame.K_BACKSPACE:
@@ -90,6 +100,12 @@ class EventHandler:
                     continue_running = False
                     continue
                 if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        # Cancel extrude mode
+                        self.game.extrude_mode = False
+                        self.game.extrude_text = ""
+                        self.game.extrude_error = ""
+                        continue
                     if event.key == pygame.K_RETURN:
                         self.apply_extrude()
                     elif event.key == pygame.K_BACKSPACE:
@@ -108,6 +124,10 @@ class EventHandler:
                     continue_running = False
                     continue
                 if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        # Cancel filename edit
+                        self.game.filename_edit_mode = False
+                        continue
                     if event.key == pygame.K_RETURN:
                         self.apply_filename_edit()
                     elif event.key == pygame.K_BACKSPACE:
@@ -206,6 +226,10 @@ class EventHandler:
                         self.apply_edit()
                     elif event.key == pygame.K_BACKSPACE:
                         self.game.edit_text = self.game.edit_text[:-1]
+                    elif event.key == pygame.K_ESCAPE:
+                        # Cancel edit of selected vertex
+                        self.game.edit_mode = False
+                        self.game.edit_text = ""
                     else:
                         self.game.edit_text += event.unicode
                 # Only allow deletion when not in any text-editing mode
@@ -216,8 +240,10 @@ class EventHandler:
                     if 'clear_vertices' in keybindings and event.key == pygame.key.key_code(keybindings['clear_vertices']):
                         self.clear_all_vertices()
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
+                # Do not engage rotate when in shapes mode to allow key reuse (e.g., 'r' for Rectangle)
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
-                    self.rotate_key_held = True
+                    if not getattr(self.game, 'shapes_mode', False):
+                        self.rotate_key_held = True
                 # Shape entry hotkeys only active when shapes mode is enabled
                 if getattr(self.game, 'shapes_mode', False):
                     if event.key == pygame.key.key_code(keybindings.get('shape_rectangle', 'r')):
@@ -333,6 +359,28 @@ class EventHandler:
             pass
         return "[0.0, 0.0, 0.0]"
 
+    def _get_default_shape_point_text(self):
+        # If there are no vertices, default to origin
+        try:
+            total = len(verticesHolder.vertices) // 6
+            if total == 0:
+                return "[0.0, 0.0, 0.0]"
+            # Prefer last selected vertex if available
+            idx = getattr(self.game, 'last_selected_vertex_index', None)
+            if idx is not None and 0 <= idx < total:
+                coords = verticesHolder.vertices[idx*6:idx*6+3]
+                if len(coords) == 3:
+                    x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
+                    return f"[{x}, {y}, {z}]"
+            # Otherwise use the last vertex in the list
+            coords = verticesHolder.vertices[(total-1)*6:(total-1)*6+3]
+            if len(coords) == 3:
+                x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
+                return f"[{x}, {y}, {z}]"
+        except Exception:
+            pass
+        return "[0.0, 0.0, 0.0]"
+
     # ===================== Shapes Mode / Input Flow =====================
     def toggle_shapes_mode(self):
         # Exit any existing shape input flow when toggling
@@ -342,6 +390,9 @@ class EventHandler:
             self.game.set_status("Shapes Mode OFF", 120)
         else:
             self.cancel_shape_flow(clear_error=True)
+            # Ensure rotation states are cleared when entering shapes mode
+            self.mouse_button_rotation_held = False
+            self.rotate_key_held = False
             self.game.set_status("Shapes Mode ON", 120)
 
     def cancel_shape_flow(self, clear_error:bool=False):
@@ -370,6 +421,9 @@ class EventHandler:
         self.game.shape_input_mode = 'rectangle'
         self.game.shape_primary_text = ""
         self.game.shape_secondary_text = ""
+        # Prevent accidental rotation while starting shape flow
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
         vertices = verticesHolder.vertices.reshape(-1, 6)
         if len(self.game.selected_vertices) == 2 and len(vertices) > 0:
             # Two-vertex rectangle mode
@@ -390,6 +444,8 @@ class EventHandler:
         # Default single-point rectangle mode
         self._shape_two_vertices_mode = False
         self.game.shape_step = 'point'
+        # Prefill default point
+        self.game.shape_primary_text = self._get_default_shape_point_text()
         self.game.shape_error = "Enter start point [x, y, z]"
 
     def start_ngon_flow(self):
@@ -397,6 +453,11 @@ class EventHandler:
         self.game.shape_step = 'point'
         self.game.shape_primary_text = ""
         self.game.shape_secondary_text = ""
+        # Prevent accidental rotation while starting shape flow
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
+        # Prefill default point
+        self.game.shape_primary_text = self._get_default_shape_point_text()
         self.game.shape_error = "Enter center/start point [x, y, z]"
 
     def backspace_shape_text(self):
@@ -507,6 +568,9 @@ class EventHandler:
                 self._append_vertex_with_color(pos, color)
         self.game.renderer.renderer3D.update_vertex_buffer()
         self.game.set_status("Rectangle added", 180)
+        # Ensure rotation states are cleared after shape commit
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
         self.cancel_shape_flow(clear_error=True)
 
     def _commit_ngon(self):
@@ -531,6 +595,9 @@ class EventHandler:
                 self._append_vertex_with_color(pos, color)
         self.game.renderer.renderer3D.update_vertex_buffer()
         self.game.set_status(f"{n}-gon added", 180)
+        # Ensure rotation states are cleared after shape commit
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
         self.cancel_shape_flow(clear_error=True)
 
     def _append_vertex_with_color(self, pos_tuple, color_rgb):
@@ -603,6 +670,9 @@ class EventHandler:
         # Ensure new vertices are float32 and update buffer
         self.game.renderer.renderer3D.update_vertex_buffer()
         self.game.set_status("Rectangle added (from 2 vertices)", 180)
+        # Ensure rotation states are cleared after shape commit
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
         self.cancel_shape_flow(clear_error=True)
 
     def _fill_among_indices(self, indices):
@@ -885,6 +955,19 @@ class EventHandler:
         # and may remove freshly created boundary faces.
         if not used_fallback_for_sides:
             self.remove_internal_edges_via_raycasts()
+
+        # Remove the raw extruded copy rows (they were only used as positional sources for triangulation)
+        try:
+            rows_all = verticesHolder.vertices.reshape(-1, 6)
+            new_copy_indices = [index_map[i] for i in selected if i in index_map]
+            if new_copy_indices:
+                keep_mask = np.ones(len(rows_all), dtype=bool)
+                keep_mask[new_copy_indices] = False
+                rows_kept = rows_all[keep_mask]
+                verticesHolder.vertices = rows_kept.astype('f4').flatten()
+        except Exception as _:
+            # Best-effort cleanup; ignore failures
+            pass
 
         # Done; update GPU and exit mode
         self.game.renderer.renderer3D.update_vertex_buffer()

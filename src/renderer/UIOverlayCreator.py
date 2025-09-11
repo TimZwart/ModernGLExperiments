@@ -45,10 +45,23 @@ class UIOverlayCreator:
         # Create a clickable area for each vertex (hidden while in shapes mode)
         self.vertex_rects = []
         total_vertices = len(verticesHolder.vertices) // 6
+        # Warn if vertex count not divisible by 3 (incomplete triangle at the end)
+        trailing_count = total_vertices % 3
+        trailing_indices = []
+        if trailing_count != 0:
+            trailing_indices = list(range(total_vertices - trailing_count, total_vertices)) if total_vertices >= trailing_count else []
+            warn_text = f"Warning: {trailing_count} stray vertex" + ("" if trailing_count == 1 else "ices") + "; last triangle incomplete"
+            warn_surface = self.font.render(warn_text, True, (255, 200, 0))
+            # Top-right corner to avoid overlapping main UI
+            self.overlay.blit(warn_surface, (max(10, self.width - 360), 10))
         if not getattr(self.game, 'shapes_mode', False):
             for i in range(self.scroll_offset, min(self.scroll_offset + self.max_visible_vertices, total_vertices)):
                 vertex_text = f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}"
-                color = (255, 255, 0) if i in self.game.yellow_highlights else (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
+                # Dark purple for trailing (stray) vertices in the list
+                if i in trailing_indices:
+                    color = (128, 0, 128)
+                else:
+                    color = (255, 255, 0) if i in self.game.yellow_highlights else (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
                 text_surface = self.font.render(vertex_text, True, color)
                 y_position = 40 + (i - self.scroll_offset) * 30
                 self.overlay.blit(text_surface, (10, y_position))
@@ -189,6 +202,20 @@ class UIOverlayCreator:
                 if not np.isnan(sx) and not np.isnan(sy) and 0 <= sx < self.width and 0 <= sy < self.height:
                     rect = pygame.Rect(sx - square_size // 2, sy - square_size // 2, square_size, square_size)
                     pygame.draw.rect(self.overlay, (255, 0, 0, 255), rect)
+        # Draw trailing (stray) vertex markers in dark purple
+        if trailing_indices:
+            vertices = verticesHolder.vertices.reshape(-1, 6)
+            try:
+                trailing_pos = vertices[trailing_indices, :3]
+                screen_coords = self.game.renderer.renderer3D.world_to_screen(trailing_pos)
+                square_size = 10
+                for coord in screen_coords:
+                    sx, sy = coord
+                    if not np.isnan(sx) and not np.isnan(sy) and 0 <= sx < self.width and 0 <= sy < self.height:
+                        rect = pygame.Rect(sx - square_size // 2, sy - square_size // 2, square_size, square_size)
+                        pygame.draw.rect(self.overlay, (128, 0, 128, 255), rect)
+            except Exception:
+                pass
 
     def draw_help_screen(self):
         font = pygame.font.Font(None, 24)
