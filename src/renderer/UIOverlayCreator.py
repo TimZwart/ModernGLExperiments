@@ -61,7 +61,7 @@ class UIOverlayCreator:
                 if i in trailing_indices:
                     color = (128, 0, 128)
                 else:
-                    color = (255, 255, 0) if i in self.game.yellow_highlights else (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 255)
+                    color = (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 0) if i in self.game.yellow_highlights else (255, 255, 255)
                 text_surface = self.font.render(vertex_text, True, color)
                 y_position = 40 + (i - self.scroll_offset) * 30
                 self.overlay.blit(text_surface, (10, y_position))
