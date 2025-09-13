@@ -166,6 +166,69 @@ class UIOverlayCreator:
             help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
             self.overlay.blit(help_prompt, (10, self.height - 110))
 
+        # Axis guides at base vertex during rectangle two-vertex 'direction' step
+        try:
+            if (
+                getattr(self.game, 'shapes_mode', False)
+                and getattr(self.game, 'shape_input_mode', None) == 'rectangle'
+                and getattr(self.game, 'shape_step', None) == 'direction'
+                and hasattr(self.game, 'event_handler')
+                and getattr(self.game.event_handler, '_shape_two_vertices_mode', False)
+            ):
+                base_world = None
+                # Prefer stored base point from the rectangle flow
+                if hasattr(self.game.event_handler, '_shape_edge_p0'):
+                    base_world = np.array(self.game.event_handler._shape_edge_p0, dtype=float)
+                # Fallback to highlighted base vertex index
+                elif getattr(self.game.event_handler, '_shape_base_index', None) is not None:
+                    idx = int(self.game.event_handler._shape_base_index)
+                    verts = verticesHolder.vertices.reshape(-1, 6)
+                    if 0 <= idx < len(verts):
+                        base_world = verts[idx, :3].astype(float)
+                if base_world is not None:
+                    # Compute fixed pixel-length guides using screen-space directions
+                    px_len = 50.0
+                    eps = 0.05
+                    pts_world = np.vstack([
+                        base_world,
+                        base_world + np.array([eps, 0.0, 0.0], dtype=float),
+                        base_world + np.array([0.0, eps, 0.0], dtype=float),
+                        base_world + np.array([0.0, 0.0, eps], dtype=float),
+                    ])
+                    screen_pts = self.game.renderer.renderer3D.world_to_screen(pts_world)
+                    bx, by = screen_pts[0]
+                    if not (np.isnan(bx) or np.isnan(by)):
+                        # Draw base coordinates near the base screen position
+                        try:
+                            bx_text = f"[{base_world[0]:.3f}, {base_world[1]:.3f}, {base_world[2]:.3f}]"
+                            base_text_surface = self.font.render(bx_text, True, (255, 255, 255))
+                            shadow_surface = self.font.render(bx_text, True, (0, 0, 0))
+                            # Slight shadow for readability
+                            self.overlay.blit(shadow_surface, (bx + 7, by + 7))
+                            self.overlay.blit(base_text_surface, (bx + 6, by + 6))
+                        except Exception:
+                            pass
+                        dir_vectors = [screen_pts[1] - screen_pts[0], screen_pts[2] - screen_pts[0], screen_pts[3] - screen_pts[0]]
+                        colors = [(255, 0, 0, 255), (0, 255, 0, 255), (0, 0, 255, 255)]
+                        labels = ["+X", "+Y", "+Z"]
+                        for d, color, label in zip(dir_vectors, colors, labels):
+                            dx, dy = float(d[0]), float(d[1])
+                            if np.isnan(dx) or np.isnan(dy):
+                                continue
+                            dlen = (dx*dx + dy*dy) ** 0.5
+                            if dlen <= 1e-6:
+                                continue
+                            nx, ny = dx / dlen, dy / dlen
+                            ex, ey = bx + nx * px_len, by + ny * px_len
+                            pygame.draw.line(self.overlay, color, (bx, by), (ex, ey), 2)
+                            # Draw label slightly beyond the line end along its direction
+                            tx, ty = ex + nx * 6.0, ey + ny * 6.0
+                            text_surface = self.font.render(label, True, (color[0], color[1], color[2]))
+                            self.overlay.blit(text_surface, (tx, ty))
+        except Exception:
+            # Avoid overlay crashes from any transient state issues
+            pass
+
         # Display selected vertex coordinates
         if self.game.selected_vertices:
             if len(self.game.selected_vertices) == 1:
