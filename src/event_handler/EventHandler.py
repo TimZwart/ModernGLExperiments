@@ -595,6 +595,8 @@ class EventHandler:
     def _commit_rectangle(self):
         # Snapshot before mutating geometry
         self.game.push_undo_snapshot("Add rectangle")
+        # Avoid corrupting triangle grouping if there are stray vertices at the end
+        self._drop_trailing_incomplete_vertices()
         px, py, pz = self._shape_tmp_point
         width = float(self._shape_tmp_width)
         length = float(self._shape_tmp_length)
@@ -622,6 +624,8 @@ class EventHandler:
         except Exception:
             n = None
         self.game.push_undo_snapshot(f"Add {n}-gon" if n is not None else "Add n-gon")
+        # Avoid corrupting triangle grouping if there are stray vertices at the end
+        self._drop_trailing_incomplete_vertices()
         px, py, pz = self._shape_tmp_point
         n = int(self._shape_tmp_sides)
         # Create a unit circle polygon in XY plane centered at starting point; use radius 1.0
@@ -668,6 +672,25 @@ class EventHandler:
         except Exception:
             raise ValueError("Enter a numeric value (e.g., 10 or 10.5)")
 
+    def _drop_trailing_incomplete_vertices(self) -> int:
+        """Trim trailing stray vertex rows so total rows is a multiple of 3.
+        Returns number of rows dropped.
+        """
+        try:
+            rows_count = len(verticesHolder.vertices) // 6
+            remainder = rows_count % 3
+            if remainder == 0:
+                return 0
+            if rows_count - remainder <= 0:
+                verticesHolder.vertices = np.array([], dtype='f4')
+                return remainder
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            kept = rows[: rows_count - remainder]
+            verticesHolder.vertices = kept.astype('f4').flatten()
+            return remainder
+        except Exception:
+            return 0
+
     def _commit_rectangle_from_two_vertices(self):
         # Snapshot before mutating geometry
         self.game.push_undo_snapshot("Add rectangle (2 vertices)")
@@ -679,6 +702,9 @@ class EventHandler:
         except Exception:
             self.game.shape_error = "Invalid temporary state for rectangle"
             return
+
+        # Avoid corrupting triangle grouping if there are stray vertices at the end
+        self._drop_trailing_incomplete_vertices()
 
         e = p1 - p0
         e_len2 = float(np.dot(e, e))
