@@ -50,6 +50,11 @@ class EventHandler:
                     continue_running = False
                     continue
                 if event.type == pygame.KEYDOWN:
+                    # Global Undo during shape entry (allow Ctrl+Z)
+                    mods = pygame.key.get_mods()
+                    if (mods & pygame.KMOD_CTRL) and (event.key == pygame.K_z):
+                        self.game.undo_last_action()
+                        continue
                     # Allow help key during shape input flow to toggle shapes help screen
                     if (event.key == pygame.key.key_code(keybindings['help'])) or (event.key == self.alternate_keys['help']):
                         self.game.help_mode = not self.game.help_mode
@@ -105,6 +110,21 @@ class EventHandler:
                         self.game.extrude_mode = False
                         self.game.extrude_text = ""
                         self.game.extrude_error = ""
+                        # Clear extrude base indicators
+                        if hasattr(self.game, 'extrude_base_index'):
+                            try:
+                                delattr(self.game, 'extrude_base_index')
+                            except Exception:
+                                pass
+                        if hasattr(self.game, 'extrude_base_point'):
+                            try:
+                                delattr(self.game, 'extrude_base_point')
+                            except Exception:
+                                pass
+                        try:
+                            self.game.yellow_highlights.clear()
+                        except Exception:
+                            pass
                         continue
                     if event.key == pygame.K_RETURN:
                         self.apply_extrude()
@@ -163,6 +183,12 @@ class EventHandler:
                             self.game.extrude_error = ""
                             self.mouse_button_rotation_held = False
                             self.rotate_key_held = False
+                            # Establish and show base point used for offset calculation
+                            base_idx, base_point = self._get_extrude_base_index_and_point()
+                            if base_idx is not None and base_point is not None:
+                                self.game.extrude_base_index = base_idx
+                                self.game.extrude_base_point = [float(base_point[0]), float(base_point[1]), float(base_point[2])]
+                                self.game.yellow_highlights = {base_idx}
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
                         selected = list(self.game.selected_vertices)[0]
@@ -210,6 +236,14 @@ class EventHandler:
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
                     self.rotate_key_held = False
             elif event.type == pygame.KEYDOWN:
+                mods = pygame.key.get_mods()
+                # Undo: Ctrl+Z or configured key
+                if (mods & pygame.KMOD_CTRL) and (event.key == pygame.K_z):
+                    self.game.undo_last_action()
+                    continue
+                if event.key == pygame.key.key_code(keybindings.get('undo', 'z')):
+                    self.game.undo_last_action()
+                    continue
                 # Toggle shapes mode irrespective of other modes except text editing ones handled above
                 if event.key == pygame.key.key_code(keybindings.get('shapes_mode', 'm')):
                     self.toggle_shapes_mode()
@@ -271,6 +305,12 @@ class EventHandler:
                         self.game.extrude_error = ""
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
+                        # Establish and show base point used for offset calculation
+                        base_idx, base_point = self._get_extrude_base_index_and_point()
+                        if base_idx is not None and base_point is not None:
+                            self.game.extrude_base_index = base_idx
+                            self.game.extrude_base_point = [float(base_point[0]), float(base_point[1]), float(base_point[2])]
+                            self.game.yellow_highlights = {base_idx}
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
                     self.game.filename_edit_mode = True
                     self.game.filename_edit_purpose = 'save'
@@ -553,6 +593,8 @@ class EventHandler:
             self.game.shape_error = f"{e}"
 
     def _commit_rectangle(self):
+        # Snapshot before mutating geometry
+        self.game.push_undo_snapshot("Add rectangle")
         px, py, pz = self._shape_tmp_point
         width = float(self._shape_tmp_width)
         length = float(self._shape_tmp_length)
@@ -574,6 +616,12 @@ class EventHandler:
         self.cancel_shape_flow(clear_error=True)
 
     def _commit_ngon(self):
+        # Snapshot before mutating geometry
+        try:
+            n = int(self._shape_tmp_sides)
+        except Exception:
+            n = None
+        self.game.push_undo_snapshot(f"Add {n}-gon" if n is not None else "Add n-gon")
         px, py, pz = self._shape_tmp_point
         n = int(self._shape_tmp_sides)
         # Create a unit circle polygon in XY plane centered at starting point; use radius 1.0
@@ -621,6 +669,8 @@ class EventHandler:
             raise ValueError("Enter a numeric value (e.g., 10 or 10.5)")
 
     def _commit_rectangle_from_two_vertices(self):
+        # Snapshot before mutating geometry
+        self.game.push_undo_snapshot("Add rectangle (2 vertices)")
         try:
             p0 = np.array(self._shape_edge_p0, dtype=float)
             p1 = np.array(self._shape_edge_p1, dtype=float)
@@ -768,6 +818,8 @@ class EventHandler:
         try:
             new_coords = eval(self.game.edit_text)
             if isinstance(new_coords, (list, tuple)) and len(new_coords) == 3:
+                # Snapshot before edit
+                self.game.push_undo_snapshot("Edit vertex")
                 verticesHolder.vertices[selected*6:selected*6+3] = new_coords
                 print(f"New vertex coordinates set to: {new_coords}")
                 self.game.edit_mode = False
@@ -820,6 +872,8 @@ class EventHandler:
         assert isinstance(y, float), "y must be float"
         assert isinstance(z, float), "z must be float"
         
+        # Snapshot before mutating geometry
+        self.game.push_undo_snapshot("Add vertex")
         current_count = len(verticesHolder.vertices) // 6
         if current_count % 3 == 0:
             self.game.current_color = self.game.random_color()
@@ -867,7 +921,13 @@ class EventHandler:
         if last_idx is None or last_idx < 0 or last_idx >= len(vertices):
             self.game.extrude_error = "Invalid last selected vertex."
             return
+        # Base point used for offset (displayed in UI during extrude)
         P = vertices[last_idx, :3].astype(float)
+        try:
+            self.game.extrude_base_index = last_idx
+            self.game.extrude_base_point = [float(P[0]), float(P[1]), float(P[2])]
+        except Exception:
+            pass
         Pprime = np.array([px, py, pz], dtype=float)
         offset = Pprime - P
 
@@ -875,6 +935,9 @@ class EventHandler:
         if not selected:
             self.game.extrude_error = "No vertices selected."
             return
+
+        # Snapshot before mutating geometry
+        self.game.push_undo_snapshot("Extrude selection")
 
         # Copy selected to the end with translation; keep original colors for copies
         new_rows = []
@@ -974,6 +1037,32 @@ class EventHandler:
         self.game.extrude_mode = False
         self.game.extrude_text = ""
         self.game.extrude_error = ""
+        # Clear extrude base indicators and highlights
+        try:
+            if hasattr(self.game, 'extrude_base_index'):
+                delattr(self.game, 'extrude_base_index')
+            if hasattr(self.game, 'extrude_base_point'):
+                delattr(self.game, 'extrude_base_point')
+            self.game.yellow_highlights.clear()
+        except Exception:
+            pass
+
+    def _get_extrude_base_index_and_point(self):
+        try:
+            vertices = verticesHolder.vertices.reshape(-1, 6)
+            if len(vertices) == 0:
+                return None, None
+            last_idx = None
+            if self.game.last_selected_vertex_index is not None:
+                last_idx = self.game.last_selected_vertex_index
+            elif len(self.game.selected_vertices) > 0:
+                last_idx = max(self.game.selected_vertices)
+            if last_idx is None or last_idx < 0 or last_idx >= len(vertices):
+                return None, None
+            P = vertices[last_idx, :3].astype(float)
+            return last_idx, P
+        except Exception:
+            return None, None
 
     def save_vertices(self):
         filename = self.game.filename_text
@@ -1350,6 +1439,8 @@ class EventHandler:
         if not self.game.selected_vertices:
             return
         try:
+            # Snapshot before deletion
+            self.game.push_undo_snapshot("Delete selected vertices")
             vertices = verticesHolder.vertices
             if vertices.size == 0:
                 return

@@ -118,6 +118,15 @@ class UIOverlayCreator:
             if getattr(self.game, 'extrude_error', ""):
                 err_surface = self.font.render(self.game.extrude_error, True, (255, 80, 80))
                 self.overlay.blit(err_surface, (self.game.extrude_rect.left, max(0, add_rect_top - 20)))
+            # Show base point used for extrusion, if available
+            try:
+                base_pt = getattr(self.game, 'extrude_base_point', None)
+                if base_pt is not None and len(base_pt) == 3:
+                    base_text = f"Base P: [{float(base_pt[0]):.3f}, {float(base_pt[1]):.3f}, {float(base_pt[2]):.3f}]"
+                    base_surface = self.font.render(base_text, True, (200, 160, 0))
+                    self.overlay.blit(base_surface, (self.game.extrude_rect.left, max(0, add_rect_top - 20)))
+            except Exception:
+                pass
         else:
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.extrude_rect, 1)
 
@@ -312,6 +321,7 @@ class UIOverlayCreator:
             f"Pitch Up: {keybindings['pitch_up'].upper()} or Numpad 8",
             f"Pitch Down: {keybindings['pitch_down'].upper()} or Numpad 2",
             f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
+            f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
             f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
@@ -339,6 +349,7 @@ class UIOverlayCreator:
             f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
             f"Rectangle: {keybindings.get('shape_rectangle', 'r').upper()} — enter [x, y, z], width, length",
             f"Regular N-gon: {keybindings.get('shape_ngon', 'g').upper()} — enter [x, y, z], sides (>=3)",
+            f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             "Confirm current field: Enter",
             "Edit current field: Backspace",
             f"Help: {keybindings['help'].upper()} or F1 to close",

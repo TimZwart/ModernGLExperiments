@@ -40,4 +40,7 @@ if 'shape_rectangle' not in keybindings:
 if 'shape_ngon' not in keybindings:
     # Start regular n-gon entry (allowed to overlap with other keys; only active in shapes mode)
     keybindings['shape_ngon'] = 'g'
+# Default Undo key (plain 'z'); Ctrl+Z is always supported in code regardless of this
+if 'undo' not in keybindings:
+    keybindings['undo'] = 'z'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

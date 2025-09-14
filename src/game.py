@@ -70,6 +70,10 @@ class Game:
         from src.event_handler import EventHandler
         self.event_handler = EventHandler(self)
 
+        # Undo state
+        self._undo_stack = []
+        self._undo_stack_limit = 50
+
     def random_color(self):
         return [random.random() for _ in range(3)]
 
@@ -89,3 +93,57 @@ class Game:
         text, frames = self.status_message
         if frames > 0:
             self.status_message = (text, frames - 1)
+
+    # ===================== Undo support =====================
+    def push_undo_snapshot(self, reason:str=""):
+        try:
+            # Snapshot essential mutable state
+            snapshot = {
+                'vertices': np.copy(verticesHolder.vertices),
+                'selected_vertices': set(self.selected_vertices),
+                'current_color': list(self.current_color) if isinstance(self.current_color, (list, tuple)) else self.current_color,
+                'scroll_offset': int(self.uiOverlayCreator.scroll_offset),
+                'yellow_highlights': set(self.yellow_highlights),
+                'last_selected_vertex_index': self.last_selected_vertex_index,
+                'reason': str(reason) if reason else "",
+            }
+            self._undo_stack.append(snapshot)
+            if len(self._undo_stack) > self._undo_stack_limit:
+                # Drop oldest
+                self._undo_stack.pop(0)
+        except Exception as _:
+            # Best-effort; do not crash if snapshot fails
+            pass
+
+    def undo_last_action(self):
+        if not self._undo_stack:
+            self.set_status("Nothing to undo", 120)
+            return
+        snapshot = self._undo_stack.pop()
+        try:
+            # Restore vertices and UI-related state
+            verticesHolder.vertices = snapshot.get('vertices', np.array([], dtype='f4')).astype('f4')
+            self.selected_vertices = snapshot.get('selected_vertices', set())
+            self.current_color = snapshot.get('current_color', self.random_color())
+            self.uiOverlayCreator.scroll_offset = int(snapshot.get('scroll_offset', 0))
+            self.yellow_highlights = snapshot.get('yellow_highlights', set())
+            self.last_selected_vertex_index = snapshot.get('last_selected_vertex_index', None)
+
+            # Clear transient editing modes
+            self.add_vertex_mode = False
+            self.add_vertex_text = ""
+            self.add_vertex_error = ""
+            self.edit_mode = False
+            self.edit_text = ""
+            self.extrude_mode = False
+            self.extrude_text = ""
+            self.extrude_error = ""
+
+            # Update GPU buffer after restoration
+            self.renderer.renderer3D.update_vertex_buffer()
+
+            reason = snapshot.get('reason', '')
+            self.set_status(f"Undid: {reason}" if reason else "Undid last action", 150)
+        except Exception as _:
+            # If restore fails, keep going but at least avoid crash
+            self.set_status("Undo failed", 150)
