@@ -325,19 +325,20 @@ class UIOverlayCreator:
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
             f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
-            "Edit selected vertex: click its line or red box, then type [x, y, z], Enter to apply",
+            "Edit selected vertex: click its line or red box, ", 
+            "  then type [x, y, z], Enter to apply",
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts[:-11]:
+        for text in help_texts[:-13]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
 
-        # Put the last eight items on a second column
+        # Put the remaining items on a second column
         second_col_x = self.width // 2 + 20
         y2 = 20
-        for text in help_texts[-11:]:
+        for text in help_texts[-13:]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (second_col_x, y2))
             y2 += 30
