@@ -894,6 +894,39 @@ class EventHandler:
         self.game.add_vertex_text = ""
         self.game.add_vertex_error = ""
 
+    def _remove_trailing_duplicate_vertices(self) -> int:
+        """Remove any trailing vertices that duplicate an earlier vertex position.
+        Returns the number of rows removed. Only trims from the tail to avoid
+        disturbing earlier indexing; compares by rounded positions to 1e-6.
+        """
+        try:
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            if len(rows) <= 1:
+                return 0
+            # Build a set of prior positions for quick lookup
+            def round_triplet(p):
+                return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
+
+            # Start from last row, remove consecutive tail rows whose position
+            # already occurred earlier in the array
+            removed = 0
+            keep_until = len(rows)
+            seen_prior = {round_triplet(rows[i, :3]) for i in range(len(rows) - 1)}
+            # Walk backward; as soon as we encounter a truly new position, stop
+            for i in range(len(rows) - 1, -1, -1):
+                pos_key = round_triplet(rows[i, :3])
+                if pos_key in seen_prior:
+                    keep_until = i
+                    removed += 1
+                else:
+                    break
+            if removed > 0:
+                rows = rows[:keep_until]
+                verticesHolder.vertices = rows.astype('f4').flatten()
+            return removed
+        except Exception:
+            return 0
+
     def add_vertex(self, x:float, y:float, z:float):
         assert isinstance(x, float), "x must be float"
         assert isinstance(y, float), "y must be float"
@@ -907,6 +940,8 @@ class EventHandler:
         
         new_vertex = [x, y, z] + self.game.current_color
         verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
+        # After appending, trim any trailing duplicates by position
+        self._remove_trailing_duplicate_vertices()
         self.game.renderer.renderer3D.update_vertex_buffer()
         print(f"New vertex added: {new_vertex[:3]}")
 
