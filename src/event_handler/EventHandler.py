@@ -8,6 +8,7 @@ import numpy as np
 import itertools
 from src.configuration.loadconfig import keybindings, mouse_rotation_button
 import ast
+import os
 
 class EventHandler:
     def __init__(self, game):
@@ -1091,7 +1092,24 @@ class EventHandler:
             return None, None
 
     def save_vertices(self):
-        filename = self.game.filename_text
+        # Normalize filename and coerce to an actual file path on Windows
+        try:
+            normalized = self._normalize_file_input(self.game.filename_text)
+            if normalized:
+                self.game.filename_text = normalized
+            filename = normalized or self.game.filename_text
+            if filename:
+                # If a directory (including drive roots like 'C:\\'), append a default file name
+                if os.path.isdir(filename):
+                    filename = os.path.join(filename, 'untitled.vertices')
+                # If no extension, default to .vertices
+                root, ext = os.path.splitext(filename)
+                if not ext:
+                    filename = filename + '.vertices'
+                # Reflect any adjustment back to UI/state
+                self.game.filename_text = filename
+        except Exception:
+            filename = self.game.filename_text
         vertices = verticesHolder.vertices.reshape(-1, 6)
         with open(filename, 'w') as file:
             for vertex in vertices:
@@ -1101,6 +1119,13 @@ class EventHandler:
     def apply_filename_edit(self):
         # Exit filename edit mode and immediately save to the new file
         self.game.filename_edit_mode = False
+        # Normalize input once when applying
+        try:
+            normalized = self._normalize_file_input(self.game.filename_text)
+            if normalized:
+                self.game.filename_text = normalized
+        except Exception:
+            pass
         purpose = getattr(self.game, 'filename_edit_purpose', 'save')
         if purpose == 'new':
             print(f"New file name set to: {self.game.filename_text}. Clearing all vertices.")
@@ -1153,6 +1178,14 @@ class EventHandler:
                 set_last_file(self.game.filename_text)
             except Exception as e:
                 print(f"Error saving to {self.game.filename_text}: {e}")
+
+    def _normalize_file_input(self, text: str) -> str:
+        s = (text or '').strip()
+        if not s:
+            return s
+        # Convert to a normalized path (removes trailing separators except roots)
+        s = os.path.normpath(s)
+        return s
 
     def handle_vertex_list_click(self, x, y, ctrl_pressed):
         for actual_index, rect in self.game.uiOverlayCreator.vertex_rects:

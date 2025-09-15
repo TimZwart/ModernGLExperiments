@@ -26,7 +26,8 @@ def set_last_file(filename):
     try:
         if not filename:
             return
-        abs_path = os.path.abspath(filename)
+        # Normalize to avoid trailing separators and inconsistent forms
+        abs_path = os.path.normpath(os.path.abspath(filename))
         with open(_last_file_path(), 'w', encoding='utf-8') as f:
             f.write(abs_path)
     except Exception:
