@@ -719,7 +719,12 @@ class EventHandler:
         d_perp = v - proj_scale * e
         if np.linalg.norm(d_perp) <= 1e-9:
             # Direction is colinear with the edge; abort with clear error instead of guessing
-            self.game.shape_error = "Direction point is colinear with the selected edge; pick a non-colinear point"
+            self.game.shape_error = (
+                f"Direction point is colinear with the selected edge; pick a non-colinear point. "
+                f"Edge: [{float(p0[0]):.3f}, {float(p0[1]):.3f}, {float(p0[2]):.3f}] -> "
+                f"[{float(p1[0]):.3f}, {float(p1[1]):.3f}, {float(p1[2]):.3f}], "
+                f"Dir: [{float(dir_pt[0]):.3f}, {float(dir_pt[1]):.3f}, {float(dir_pt[2]):.3f}]"
+            )
             return
 
         d_perp_norm = np.linalg.norm(d_perp)
