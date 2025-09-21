@@ -74,6 +74,15 @@ class Game:
         self._undo_stack = []
         self._undo_stack_limit = 50
 
+        # File picker state
+        self.file_picker_mode = False
+        self.file_picker_dir = ""
+        self.file_picker_items = []  # full paths
+        self.file_picker_index = 0
+        self.file_picker_scroll = 0
+        self.file_picker_max_visible = 12
+        self.file_picker_item_rects = []
+
     def random_color(self):
         return [random.random() for _ in range(3)]
 

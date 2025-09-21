@@ -1,5 +1,6 @@
 import pygame
 import numpy as np
+import os
 
 from src.game import Game
 from src.geometry.VerticesHolder import verticesHolder
@@ -24,6 +25,54 @@ class UIOverlayCreator:
     def draw_ui_overlay(self):
         # Clear the overlay
         self.overlay.fill((0, 0, 0, 0))
+        # File picker modal overlay
+        if getattr(self.game, 'file_picker_mode', False):
+            # Dim background
+            dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            dim.fill((0, 0, 0, 160))
+            self.overlay.blit(dim, (0, 0))
+            # Panel
+            panel_w, panel_h = max(600, self.width // 2), min(self.height - 120, 40 + 30 * int(self.game.file_picker_max_visible))
+            panel_x = (self.width - panel_w) // 2
+            panel_y = (self.height - panel_h) // 2
+            panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+            pygame.draw.rect(self.overlay, (30, 30, 30), panel_rect)
+            pygame.draw.rect(self.overlay, (200, 200, 200), panel_rect, 2)
+            # Title
+            title = f"Open file in: {self.game.file_picker_dir}"
+            title_surf = self.font.render(title, True, (255, 255, 0))
+            self.overlay.blit(title_surf, (panel_x + 10, panel_y + 8))
+            # Items
+            self.game.file_picker_item_rects = []
+            items = self.game.file_picker_items
+            start = int(self.game.file_picker_scroll)
+            end = min(len(items), start + int(self.game.file_picker_max_visible))
+            y = panel_y + 35
+            text_left = panel_x + 10
+            for i in range(start, end):
+                name = items[i]
+                # Show basename for readability
+                try:
+                    display = name if len(name) < 2 else name
+                    display = display if os.path.isabs(display) else name
+                    display = os.path.basename(name)
+                except Exception:
+                    display = name
+                selected = (i == int(self.game.file_picker_index))
+                color = (0, 100, 200) if selected else (60, 60, 60)
+                row_rect = pygame.Rect(panel_x + 6, y - 2, panel_w - 12, 26)
+                pygame.draw.rect(self.overlay, color, row_rect)
+                pygame.draw.rect(self.overlay, (100, 100, 100), row_rect, 1)
+                text_color = (255, 255, 255)
+                text_surface = self.font.render(display, True, text_color)
+                self.overlay.blit(text_surface, (text_left, y))
+                self.game.file_picker_item_rects.append((i, row_rect))
+                y += 28
+            # Hints
+            hint = "Up/Down, PgUp/PgDn, Home/End, Enter to open, Esc to cancel"
+            hint_surf = self.font.render(hint, True, (200, 200, 200))
+            self.overlay.blit(hint_surf, (panel_x + 10, panel_y + panel_h - 24))
+            return
         if self.game.help_mode:
             if getattr(self.game, 'shapes_mode', False):
                 self.draw_shapes_help_screen()

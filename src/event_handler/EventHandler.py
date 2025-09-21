@@ -45,6 +45,71 @@ class EventHandler:
     def handle_events(self):
         continue_running = True
         for event in pygame.event.get():
+            # Modal: File picker has precedence over everything except QUIT
+            if getattr(self.game, 'file_picker_mode', False):
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.game.file_picker_mode = False
+                        continue
+                    items = self.game.file_picker_items
+                    if not items:
+                        self.game.file_picker_mode = False
+                        continue
+                    idx = int(self.game.file_picker_index)
+                    page = int(self.game.file_picker_max_visible)
+                    if event.key == pygame.K_UP:
+                        idx = max(0, idx - 1)
+                    elif event.key == pygame.K_DOWN:
+                        idx = min(len(items) - 1, idx + 1)
+                    elif event.key == pygame.K_PAGEUP:
+                        idx = max(0, idx - page)
+                    elif event.key == pygame.K_PAGEDOWN:
+                        idx = min(len(items) - 1, idx + page)
+                    elif event.key == pygame.K_HOME:
+                        idx = 0
+                    elif event.key == pygame.K_END:
+                        idx = len(items) - 1
+                    elif event.key == pygame.K_RETURN:
+                        try:
+                            chosen = items[idx]
+                            self._open_vertices_file(chosen)
+                            self.game.filename_text = chosen
+                        except Exception:
+                            pass
+                        finally:
+                            self.game.file_picker_mode = False
+                            self.game.filename_edit_purpose = 'save'
+                        continue
+                    self.game.file_picker_index = idx
+                    if idx < self.game.file_picker_scroll:
+                        self.game.file_picker_scroll = idx
+                    elif idx >= self.game.file_picker_scroll + page:
+                        self.game.file_picker_scroll = max(0, idx - page + 1)
+                    continue
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    x, y = event.pos
+                    try:
+                        for item_idx, rect in self.game.file_picker_item_rects:
+                            if rect.collidepoint(x, y):
+                                self.game.file_picker_index = int(item_idx)
+                                chosen = self.game.file_picker_items[item_idx]
+                                try:
+                                    self._open_vertices_file(chosen)
+                                    self.game.filename_text = chosen
+                                except Exception:
+                                    pass
+                                finally:
+                                    self.game.file_picker_mode = False
+                                    self.game.filename_edit_purpose = 'save'
+                                break
+                    except Exception:
+                        pass
+                    continue
+                # Swallow all other events while picker is open
+                continue
             # Modal: Shapes input flows have precedence over other inputs except QUIT
             if getattr(self.game, 'shapes_mode', False) and getattr(self.game, 'shape_input_mode', None) is not None:
                 if event.type == pygame.QUIT:
@@ -323,8 +388,7 @@ class EventHandler:
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if (('open_file' in keybindings) and event.key == pygame.key.key_code(keybindings['open_file'])) or event.key == self.alternate_keys['open_file']:
-                    self.game.filename_edit_mode = True
-                    self.game.filename_edit_purpose = 'open'
+                    self.start_file_picker()
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
@@ -1184,33 +1248,10 @@ class EventHandler:
                 # Reset last selected vertex reference on new file
                 self.game.last_selected_vertex_index = None
         elif purpose == 'open':
-            print(f"Opening file: {self.game.filename_text}")
-            try:
-                loaded = load_vertices_from_file(self.game.filename_text)
-                verticesHolder.vertices = loaded
-                self.game.selected_vertices.clear()
-                self.game.yellow_highlights.clear()
-                self.game.uiOverlayCreator.scroll_offset = 0
-
-                total_vertices = len(verticesHolder.vertices) // 6
-                if total_vertices > 0:
-                    if total_vertices % 3 == 0:
-                        self.game.current_color = self.game.random_color()
-                    else:
-                        last_vertex = verticesHolder.vertices[-6:]
-                        self.game.current_color = last_vertex[3:6].tolist()
-                else:
-                    self.game.current_color = self.game.random_color()
-
-                self.game.renderer.renderer3D.update_vertex_buffer()
-                print(f"Loaded vertices from {self.game.filename_text}: count={(len(verticesHolder.vertices)//6)}")
-                set_last_file(self.game.filename_text)
-            except Exception as e:
-                print(f"Error opening {self.game.filename_text}: {e}")
-            finally:
-                self.game.filename_edit_purpose = 'save'
-                # Reset last selected vertex reference on open
-                self.game.last_selected_vertex_index = None
+            self._open_vertices_file(self.game.filename_text)
+            self.game.filename_edit_purpose = 'save'
+            # Reset last selected vertex reference on open
+            self.game.last_selected_vertex_index = None
         else:
             print(f"Save filename set to: {self.game.filename_text}")
             try:
@@ -1226,6 +1267,81 @@ class EventHandler:
         # Convert to a normalized path (removes trailing separators except roots)
         s = os.path.normpath(s)
         return s
+
+    def _open_vertices_file(self, path: str):
+        print(f"Opening file: {path}")
+        try:
+            loaded = load_vertices_from_file(path)
+            verticesHolder.vertices = loaded
+            self.game.selected_vertices.clear()
+            self.game.yellow_highlights.clear()
+            self.game.uiOverlayCreator.scroll_offset = 0
+
+            total_vertices = len(verticesHolder.vertices) // 6
+            if total_vertices > 0:
+                if total_vertices % 3 == 0:
+                    self.game.current_color = self.game.random_color()
+                else:
+                    last_vertex = verticesHolder.vertices[-6:]
+                    self.game.current_color = last_vertex[3:6].tolist()
+            else:
+                self.game.current_color = self.game.random_color()
+
+            self.game.renderer.renderer3D.update_vertex_buffer()
+            print(f"Loaded vertices from {path}: count={(len(verticesHolder.vertices)//6)}")
+            set_last_file(path)
+        except Exception as e:
+            print(f"Error opening {path}: {e}")
+
+    def start_file_picker(self):
+        try:
+            current = self.game.filename_text or ""
+            normalized = self._normalize_file_input(current)
+            current = normalized if normalized else current
+        except Exception:
+            current = ""
+        # Determine directory to list
+        directory = None
+        if current:
+            if os.path.isdir(current):
+                directory = current
+            else:
+                directory = os.path.dirname(current)
+        if not directory:
+            try:
+                this_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(os.path.dirname(this_dir))
+                fallback = os.path.join(project_root, 'assets')
+                directory = fallback if os.path.isdir(fallback) else os.getcwd()
+            except Exception:
+                directory = os.getcwd()
+        # Gather files
+        try:
+            entries = os.listdir(directory)
+        except Exception:
+            entries = []
+        full_paths = []
+        for name in sorted(entries, key=lambda n: n.lower()):
+            fp = os.path.join(directory, name)
+            if os.path.isfile(fp):
+                full_paths.append(fp)
+        vertices_files = [p for p in full_paths if p.lower().endswith('.vertices')]
+        items = vertices_files if vertices_files else full_paths
+        self.game.file_picker_dir = directory
+        self.game.file_picker_items = items
+        # Select current file if present, else first
+        try:
+            idx = items.index(current) if current in items else 0
+        except Exception:
+            idx = 0
+        if items:
+            self.game.file_picker_index = max(0, min(len(items) - 1, idx))
+            self.game.file_picker_scroll = max(0, self.game.file_picker_index - (self.game.file_picker_max_visible // 2))
+        else:
+            self.game.file_picker_index = 0
+            self.game.file_picker_scroll = 0
+        self.game.file_picker_item_rects = []
+        self.game.file_picker_mode = True
 
     def handle_vertex_list_click(self, x, y, ctrl_pressed):
         for actual_index, rect in self.game.uiOverlayCreator.vertex_rects:
