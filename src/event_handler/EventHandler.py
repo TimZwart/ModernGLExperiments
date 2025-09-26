@@ -140,28 +140,46 @@ class EventHandler:
                         continue
                 # Swallow all other events while in shape entry flow
                 continue
-            # While entering a new vertex's coordinates, disable all other controls except text entry and QUIT
+            # While entering a new vertex's coordinates/colors, handle only text/mouse for those fields and QUIT
             if self.game.add_vertex_mode:
                 if event.type == pygame.QUIT:
                     continue_running = False
+                    continue
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    x, y = event.pos
+                    try:
+                        if self.game.add_vertex_pos_rect and self.game.add_vertex_pos_rect.collidepoint(x, y):
+                            self.game.add_vertex_focus = 'pos'
+                        elif self.game.add_vertex_color_rect and self.game.add_vertex_color_rect.collidepoint(x, y):
+                            self.game.add_vertex_focus = 'color'
+                    except Exception:
+                        pass
                     continue
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         # Cancel add-vertex mode
                         self.game.add_vertex_mode = False
                         self.game.add_vertex_text = ""
+                        self.game.add_vertex_pos_text = ""
+                        self.game.add_vertex_color_text = ""
                         self.game.add_vertex_error = ""
+                        self.game.add_vertex_focus = 'pos'
                         continue
                     if event.key == pygame.K_RETURN:
                         self.apply_add_vertex()
+                    elif event.key == pygame.K_TAB:
+                        self.game.add_vertex_focus = 'color' if self.game.add_vertex_focus == 'pos' else 'pos'
                     elif event.key == pygame.K_BACKSPACE:
-                        self.game.add_vertex_text = self.game.add_vertex_text[:-1]
+                        if self.game.add_vertex_focus == 'pos':
+                            self.game.add_vertex_pos_text = self.game.add_vertex_pos_text[:-1]
+                        else:
+                            self.game.add_vertex_color_text = self.game.add_vertex_color_text[:-1]
                         self.game.add_vertex_error = ""
                     else:
-                        # Clear placeholder on first typed character
-                        if self.game.add_vertex_text == "[0.0, 0.0, 0.0]":
-                            self.game.add_vertex_text = ""
-                        self.game.add_vertex_text += event.unicode
+                        if self.game.add_vertex_focus == 'pos':
+                            self.game.add_vertex_pos_text += event.unicode
+                        else:
+                            self.game.add_vertex_color_text += event.unicode
                         self.game.add_vertex_error = ""
                 # Swallow all other events during add-vertex edit mode
                 continue
@@ -231,9 +249,12 @@ class EventHandler:
                     x, y = event.pos
                     if self.game.add_vertex_rect and self.game.add_vertex_rect.collidepoint(x, y):
                         self.game.add_vertex_mode = True
-                        # Prefill with last selected vertex coords if available
-                        self.game.add_vertex_text = self._get_add_vertex_default_text()
+                        # Prefill with last selected vertex coords and current color
+                        pos_str, col_str = self._get_add_vertex_default_texts()
+                        self.game.add_vertex_pos_text = pos_str
+                        self.game.add_vertex_color_text = col_str
                         self.game.add_vertex_error = ""
+                        self.game.add_vertex_focus = 'pos'
                         self.mouse_button_rotation_held = False
                         self.rotate_key_held = False
                     # Disable click activation for open/save/new; use keybindings only
@@ -258,7 +279,11 @@ class EventHandler:
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
                         self.game.edit_mode = True
                         selected = list(self.game.selected_vertices)[0]
-                        self.game.edit_text = f"{list(verticesHolder.vertices[selected*6:selected*6+3])}"
+                        self._prefill_edit_fields(selected)
+                    elif self.game.edit_mode and self.game.edit_pos_rect and self.game.edit_pos_rect.collidepoint(x, y):
+                        self.game.edit_focus = 'pos'
+                    elif self.game.edit_mode and self.game.edit_color_rect and self.game.edit_color_rect.collidepoint(x, y):
+                        self.game.edit_focus = 'color'
                     elif self.handle_vertex_list_click(x, y, ctrl_pressed):
                         pass # Vertex in the list was clicked, no need to do anything else
                     else:
@@ -280,10 +305,12 @@ class EventHandler:
                         if len(self.game.selected_vertices) == 1:
                             self.game.edit_mode = True
                             selected = list(self.game.selected_vertices)[0]
-                            self.game.edit_text = f"{list(verticesHolder.vertices[selected*6:selected*6+3])}"
+                            self._prefill_edit_fields(selected)
                         else:
                             self.game.edit_mode = False
                             self.game.edit_text = ""
+                            self.game.edit_pos_text = ""
+                            self.game.edit_color_text = ""
                 elif event.button == self.rotation_button:
                     self.mouse_button_rotation_held = True
 
@@ -325,13 +352,23 @@ class EventHandler:
                     if event.key == pygame.K_RETURN:
                         self.apply_edit()
                     elif event.key == pygame.K_BACKSPACE:
-                        self.game.edit_text = self.game.edit_text[:-1]
+                        if self.game.edit_focus == 'pos':
+                            self.game.edit_pos_text = self.game.edit_pos_text[:-1]
+                        else:
+                            self.game.edit_color_text = self.game.edit_color_text[:-1]
+                    elif event.key == pygame.K_TAB:
+                        self.game.edit_focus = 'color' if self.game.edit_focus == 'pos' else 'pos'
                     elif event.key == pygame.K_ESCAPE:
                         # Cancel edit of selected vertex
                         self.game.edit_mode = False
                         self.game.edit_text = ""
+                        self.game.edit_pos_text = ""
+                        self.game.edit_color_text = ""
                     else:
-                        self.game.edit_text += event.unicode
+                        if self.game.edit_focus == 'pos':
+                            self.game.edit_pos_text += event.unicode
+                        else:
+                            self.game.edit_color_text += event.unicode
                 # Only allow deletion when not in any text-editing mode
                 if not (self.game.filename_edit_mode or self.game.add_vertex_mode or self.game.edit_mode):
                     if event.key == pygame.K_DELETE:
@@ -356,8 +393,11 @@ class EventHandler:
                 if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
                     # Enter add-vertex input mode; prefill from last selected when possible
                     self.game.add_vertex_mode = True
-                    self.game.add_vertex_text = self._get_add_vertex_default_text()
+                    pos_str, col_str = self._get_add_vertex_default_texts()
+                    self.game.add_vertex_pos_text = pos_str
+                    self.game.add_vertex_color_text = col_str
                     self.game.add_vertex_error = ""
+                    self.game.add_vertex_focus = 'pos'
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
@@ -463,6 +503,65 @@ class EventHandler:
         except Exception:
             pass
         return "[0.0, 0.0, 0.0]"
+
+    def _fmt_triplet(self, values) -> str:
+        try:
+            x, y, z = float(values[0]), float(values[1]), float(values[2])
+            return f"[{x:.3f}, {y:.3f}, {z:.3f}]"
+        except Exception:
+            try:
+                return f"[{values[0]}, {values[1]}, {values[2]}]"
+            except Exception:
+                return "[0.000, 0.000, 0.000]"
+
+    def _get_add_vertex_default_texts(self):
+        # Position
+        try:
+            idx = getattr(self.game, 'last_selected_vertex_index', None)
+            if idx is not None:
+                rows = verticesHolder.vertices.reshape(-1, 6)
+                if 0 <= idx < len(rows):
+                    pos = rows[idx, :3].astype(float)
+                    pos_str = self._fmt_triplet(pos)
+                else:
+                    pos_str = "[0.000, 0.000, 0.000]"
+            elif len(self.game.selected_vertices) == 1:
+                selected = next(iter(self.game.selected_vertices))
+                rows = verticesHolder.vertices.reshape(-1, 6)
+                if 0 <= selected < len(rows):
+                    pos = rows[selected, :3].astype(float)
+                    pos_str = self._fmt_triplet(pos)
+                else:
+                    pos_str = "[0.000, 0.000, 0.000]"
+            else:
+                pos_str = "[0.000, 0.000, 0.000]"
+        except Exception:
+            pos_str = "[0.000, 0.000, 0.000]"
+        # Color from current_color
+        try:
+            col = getattr(self.game, 'current_color', [0.0, 0.0, 0.0])
+            col_str = self._fmt_triplet(col)
+        except Exception:
+            col_str = "[1.000, 1.000, 1.000]"
+        return pos_str, col_str
+
+    def _prefill_edit_fields(self, selected_index:int):
+        try:
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            if 0 <= selected_index < len(rows):
+                pos = rows[selected_index, :3].astype(float)
+                col = rows[selected_index, 3:6].astype(float)
+                self.game.edit_pos_text = self._fmt_triplet(pos)
+                self.game.edit_color_text = self._fmt_triplet(col)
+                # For backward-compat displayed string (if used anywhere)
+                self.game.edit_text = f"{self.game.edit_pos_text} {self.game.edit_color_text}"
+                self.game.edit_focus = 'pos'
+            else:
+                self.game.edit_pos_text = "[0.000, 0.000, 0.000]"
+                self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+        except Exception:
+            self.game.edit_pos_text = "[0.000, 0.000, 0.000]"
+            self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
 
     def _get_default_shape_point_text(self):
         # If there are no vertices, default to origin
@@ -912,55 +1011,103 @@ class EventHandler:
             return
         selected = list(self.game.selected_vertices)[0]
         try:
-            new_coords = eval(self.game.edit_text)
-            if isinstance(new_coords, (list, tuple)) and len(new_coords) == 3:
-                # Snapshot before edit
-                self.game.push_undo_snapshot("Edit vertex")
-                verticesHolder.vertices[selected*6:selected*6+3] = new_coords
-                print(f"New vertex coordinates set to: {new_coords}")
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            if not (0 <= selected < len(rows)):
+                print("Selected index out of bounds")
                 self.game.edit_mode = False
-                print("edit mode deactivated")
-                self.game.renderer.renderer3D.update_vertex_buffer()
+                return
+            # Parse position
+            pos_text = (self.game.edit_pos_text or "").strip()
+            if pos_text:
+                pos_list = ast.literal_eval(pos_text)
+                if not (isinstance(pos_list, (list, tuple)) and len(pos_list) == 3):
+                    raise ValueError("Enter [x, y, z] for position")
+                px, py, pz = float(pos_list[0]), float(pos_list[1]), float(pos_list[2])
             else:
-                print(f"Invalid input: {self.game.edit_text}")
-        except:
-            print("Invalid input. Please enter coordinates as [x, y, z]")
+                px, py, pz = rows[selected, :3].astype(float)
+            # Parse color (optional)
+            color_text = (self.game.edit_color_text or "").strip()
+            if color_text:
+                col_list = ast.literal_eval(color_text)
+                if not (isinstance(col_list, (list, tuple)) and len(col_list) == 3):
+                    raise ValueError("Enter [r, g, b] for color")
+                cr, cg, cb = float(col_list[0]), float(col_list[1]), float(col_list[2])
+            else:
+                cr, cg, cb = rows[selected, 3:6].astype(float)
+            # Snapshot before edit
+            self.game.push_undo_snapshot("Edit vertex")
+            rows[selected, :3] = [px, py, pz]
+            rows[selected, 3:6] = [cr, cg, cb]
+            verticesHolder.vertices = rows.astype('f4').flatten()
+            self.game.current_color = [cr, cg, cb]
+            print(f"Updated vertex {selected} to pos={[px,py,pz]} color={[cr,cg,cb]}")
+            self.game.edit_mode = False
+            self.game.edit_text = ""
+            self.game.edit_pos_text = ""
+            self.game.edit_color_text = ""
+            self.game.renderer.renderer3D.update_vertex_buffer()
+        except Exception as e:
+            print(f"Invalid edit input: {e}")
             raise
 
     def apply_add_vertex(self):
-        # Safely parse and validate input like [x, y, z]
-        text = (self.game.add_vertex_text or "").strip()
-        # If user accidentally typed a second list after the placeholder, keep the last list
-        if text.count('[') > 1:
-            last_open = text.rfind('[')
-            last_close = text.rfind(']')
-            if last_close != -1 and last_close > last_open:
-                text = text[last_open:last_close+1]
-            else:
-                text = text[last_open:]
+        # Parse position and optional color from separate fields
+        pos_text = (self.game.add_vertex_pos_text or "").strip()
+        color_text = (self.game.add_vertex_color_text or "").strip()
         try:
-            parsed = ast.literal_eval(text)
-        except (ValueError, SyntaxError):
-            self.game.add_vertex_error = "Invalid format. Use [x, y, z] with numbers."
-            print(f"Invalid add-vertex input: {text}")
+            pos = ast.literal_eval(pos_text)
+        except Exception:
+            self.game.add_vertex_error = "Invalid position. Use [x, y, z]."
             return
-
-        if not (isinstance(parsed, (list, tuple)) and len(parsed) == 3):
-            self.game.add_vertex_error = "Enter exactly three numbers like [1.0, 2.0, 3.0]."
-            print(f"Invalid add-vertex input (not 3 items): {parsed}")
+        if not (isinstance(pos, (list, tuple)) and len(pos) == 3):
+            self.game.add_vertex_error = "Position must be [x, y, z]."
             return
-
         try:
-            x, y, z = (float(parsed[0]), float(parsed[1]), float(parsed[2]))
-        except (TypeError, ValueError):
+            x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+        except Exception:
             self.game.add_vertex_error = "Coordinates must be numbers."
-            print(f"Invalid add-vertex input (non-numeric): {parsed}")
             return
+        color_specified = False
+        if color_text:
+            try:
+                col = ast.literal_eval(color_text)
+            except Exception:
+                self.game.add_vertex_error = "Invalid color. Use [r, g, b]."
+                return
+            if not (isinstance(col, (list, tuple)) and len(col) == 3):
+                self.game.add_vertex_error = "Color must be [r, g, b]."
+                return
+            try:
+                cr, cg, cb = float(col[0]), float(col[1]), float(col[2])
+                color_specified = True
+            except Exception:
+                self.game.add_vertex_error = "Color values must be numbers."
+                return
+        else:
+            cr, cg, cb = self.game.current_color if hasattr(self.game, 'current_color') else (1.0, 1.0, 1.0)
 
-        self.add_vertex(x, y, z)
-        print(f"Added vertex at: {[x, y, z]}")
+        # Snapshot before mutating geometry
+        self.game.push_undo_snapshot("Add vertex")
+        current_count = len(verticesHolder.vertices) // 6
+        if not color_specified:
+            if current_count % 3 == 0:
+                # New triangle group, rotate to a new current color
+                self.game.current_color = self.game.random_color()
+            cr, cg, cb = self.game.current_color
+        else:
+            # Respect user-specified color and continue using it
+            self.game.current_color = [cr, cg, cb]
+
+        new_vertex = [x, y, z, cr, cg, cb]
+        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
+        # After appending, trim any trailing duplicates by position
+        self._remove_trailing_duplicate_vertices()
+        self.game.renderer.renderer3D.update_vertex_buffer()
+        print(f"New vertex added: {[x, y, z]} color={[cr, cg, cb]}")
         self.game.add_vertex_mode = False
         self.game.add_vertex_text = ""
+        self.game.add_vertex_pos_text = ""
+        self.game.add_vertex_color_text = ""
         self.game.add_vertex_error = ""
 
     def _remove_trailing_duplicate_vertices(self) -> int:

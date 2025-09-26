@@ -17,6 +17,20 @@ class UIOverlayCreator:
         self.scroll_offset = 0
         self.max_visible_vertices = 15
 
+    def _pos_placeholder(self):
+        return "[x, y, z]"
+
+    def _color_placeholder(self):
+        # Show current color rounded as hint
+        try:
+            col = getattr(self.game, 'current_color', [1.0, 1.0, 1.0])
+            r = f"{float(col[0]):.3f}"
+            g = f"{float(col[1]):.3f}"
+            b = f"{float(col[2]):.3f}"
+            return f"[{r}, {g}, {b}]"
+        except Exception:
+            return "[r, g, b]"
+
     def get_vertex_rect(self, index, y_position):
         vertex_text = f"Vertex {index}: {verticesHolder.vertices[index * 6:index * 6 + 3]}"
         text_width, text_height = self.font.size(vertex_text)
@@ -147,10 +161,22 @@ class UIOverlayCreator:
         add_rect_top = unified_top - 35
         self.game.add_vertex_rect.topleft = (10, add_rect_top)
         if self.game.add_vertex_mode:
-            pygame.draw.rect(self.overlay, (0, 200, 255), self.game.add_vertex_rect, 2)
-            add_surface = self.font.render(self.game.add_vertex_text, True, (0, 200, 255))
-            self.overlay.blit(add_surface, (15, add_rect_top + 5))
-            # Render validation error above the input if present
+            # Position field
+            self.game.add_vertex_pos_rect.topleft = (10, add_rect_top)
+            pygame.draw.rect(self.overlay, (0, 200, 255) if self.game.add_vertex_focus == 'pos' else (0, 120, 150), self.game.add_vertex_pos_rect, 2)
+            pos_text = self.game.add_vertex_pos_text if self.game.add_vertex_pos_text else self._pos_placeholder()
+            pos_color = (0, 200, 255) if self.game.add_vertex_focus == 'pos' else (0, 200, 255)
+            pos_surface = self.font.render(pos_text, True, pos_color)
+            self.overlay.blit(pos_surface, (self.game.add_vertex_pos_rect.left + 5, add_rect_top + 5))
+            # Color field
+            self.game.add_vertex_color_rect.top = add_rect_top + 35
+            self.game.add_vertex_color_rect.left = 10
+            pygame.draw.rect(self.overlay, (0, 200, 255) if self.game.add_vertex_focus == 'color' else (0, 120, 150), self.game.add_vertex_color_rect, 2)
+            col_text = self.game.add_vertex_color_text if self.game.add_vertex_color_text else self._color_placeholder()
+            col_color = (0, 200, 255) if self.game.add_vertex_focus == 'color' else (0, 200, 255)
+            col_surface = self.font.render(col_text, True, col_color)
+            self.overlay.blit(col_surface, (self.game.add_vertex_color_rect.left + 5, self.game.add_vertex_color_rect.top + 5))
+            # Validation error above the first input if present
             if getattr(self.game, 'add_vertex_error', ""):
                 err_surface = self.font.render(self.game.add_vertex_error, True, (255, 80, 80))
                 self.overlay.blit(err_surface, (15, max(0, add_rect_top - 20)))
@@ -295,17 +321,48 @@ class UIOverlayCreator:
                 if self.game.edit_mode:
                     selected_text = self.font.render(f"Edit Vertex {selected}: {self.game.edit_text}", True, (255, 255, 0))
                     pygame.draw.rect(self.overlay, (255, 255, 0), self.game.edit_rect, 2)
+                    # Position the label slightly higher and to the right to avoid overlap
+                    label_x = 160
+                    label_y = self.height - 95
                 else:
                     selected_text = self.font.render(f"Selected Vertex {selected}: {selected_coords}", True, (255, 255, 0))
-                self.overlay.blit(selected_text, (10, self.height - 50))
+                    label_x = 10
+                    label_y = self.height - 50
+                self.overlay.blit(selected_text, (label_x, label_y))
 
                 # Update editable area
                 self.game.edit_rect.top = self.height - 35
                 pygame.draw.rect(self.overlay, (255, 255, 0), self.game.edit_rect, 2)
 
                 if self.game.edit_mode:
-                    edit_surface = self.font.render(self.game.edit_text, True, (255, 255, 0))
-                    self.overlay.blit(edit_surface, (15, self.height - 30))
+                    # Draw two edit fields side-by-side: position (left), color (right)
+                    self.game.edit_pos_rect.top = self.height - 35
+                    self.game.edit_pos_rect.left = 10
+                    self.game.edit_color_rect.top = self.height - 35
+                    desired_left = self.game.edit_pos_rect.left + self.game.edit_pos_rect.width + 15
+                    max_left = self.width - self.game.edit_color_rect.width - 10
+                    self.game.edit_color_rect.left = max(10, min(desired_left, max_left))
+
+                    # Labels above fields
+                    try:
+                        pos_label = self.font.render("pos:", True, (255, 255, 0))
+                        color_label = self.font.render("color:", True, (255, 255, 0))
+                        self.overlay.blit(pos_label, (self.game.edit_pos_rect.left, max(0, self.game.edit_pos_rect.top - 20)))
+                        self.overlay.blit(color_label, (self.game.edit_color_rect.left, max(0, self.game.edit_color_rect.top - 20)))
+                    except Exception:
+                        pass
+
+                    # Position field
+                    pygame.draw.rect(self.overlay, (255, 255, 0) if self.game.edit_focus == 'pos' else (150, 150, 0), self.game.edit_pos_rect, 2)
+                    pos_text = self.game.edit_pos_text if getattr(self.game, 'edit_pos_text', "") else self._pos_placeholder()
+                    pos_surface = self.font.render(pos_text, True, (255, 255, 0))
+                    self.overlay.blit(pos_surface, (self.game.edit_pos_rect.left + 5, self.game.edit_pos_rect.top + 5))
+
+                    # Color field
+                    pygame.draw.rect(self.overlay, (255, 255, 0) if self.game.edit_focus == 'color' else (150, 150, 0), self.game.edit_color_rect, 2)
+                    color_text = self.game.edit_color_text if getattr(self.game, 'edit_color_text', "") else self._color_placeholder()
+                    color_surface = self.font.render(color_text, True, (255, 255, 0))
+                    self.overlay.blit(color_surface, (self.game.edit_color_rect.left + 5, self.game.edit_color_rect.top + 5))
             else:
                 selected_list = sorted(list(self.game.selected_vertices))
                 selected_text = self.font.render(f"Selected Vertices: {selected_list}", True, (255, 255, 0))
@@ -352,7 +409,7 @@ class UIOverlayCreator:
             f"Right: {keybindings['right'].upper()} or Arrow Right",
             f"Up: {keybindings['up'].upper()} or Page Up",
             f"Down: {keybindings['down'].upper()} or Page Down",
-            f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert (enter [x, y, z])",
+            f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert (enter position [x, y, z] and color [r, g, b])",
             "Delete Selected: Delete",
             f"Clear All Vertices: {keybindings.get('clear_vertices', 'x').upper()}",
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
@@ -374,12 +431,13 @@ class UIOverlayCreator:
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
             f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
-            "Edit selected vertex: click its line or red box, ", 
-            "  then type [x, y, z], Enter to apply",
+            "Edit selected vertex: click its line or red box,",
+            "  then edit position [x, y, z] and color [r, g, b]",
+            "  Tab to switch fields, Enter to apply",
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts[:-13]:
+        for text in help_texts[:-15]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
@@ -387,7 +445,7 @@ class UIOverlayCreator:
         # Put the remaining items on a second column
         second_col_x = self.width // 2 + 20
         y2 = 20
-        for text in help_texts[-13:]:
+        for text in help_texts[-15:]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (second_col_x, y2))
             y2 += 30

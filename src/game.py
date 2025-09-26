@@ -15,10 +15,24 @@ class Game:
         self.edit_mode = False
         self.edit_text = ""
         self.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
+        # Two-field edit support: position and color
+        self.edit_pos_text = ""
+        self.edit_color_text = ""
+        self.edit_pos_rect = self.edit_rect
+        self.edit_color_rect = pygame.Rect(10, self.height - 70, 290, 30)
+        self.edit_focus = 'pos'  # 'pos' | 'color'
+        self.edit_error = ""
         # Add-vertex editing variables
         self.add_vertex_mode = False
         self.add_vertex_text = ""
         self.add_vertex_rect = pygame.Rect(10, self.height - 105, 350, 30)
+        # Two-field add support: position and color
+        self.add_vertex_pos_text = ""
+        self.add_vertex_color_text = ""
+        self.add_vertex_pos_rect = self.add_vertex_rect
+        self.add_vertex_color_rect = pygame.Rect(10, self.height - 70, 350, 30)
+        self.add_vertex_focus = 'pos'  # 'pos' | 'color'
+        self.add_vertex_placeholder_active = False
         self.add_vertex_error = ""
         # Filename editing variables
         self.filename_edit_mode = False
