@@ -7,6 +7,7 @@ from src.configuration.session_store import set_last_file
 import numpy as np
 import itertools
 from src.configuration.loadconfig import keybindings, mouse_rotation_button
+from src.event_handler.CoveredTriangleRemover import CoveredTriangleRemover
 import ast
 import os
 
@@ -17,6 +18,7 @@ class EventHandler:
         self.mouse_button_rotation_held = False
         self.rotate_key_held = False
         self.triangle_filler = TriangleFiller(game)
+        self.covered_triangle_remover = CoveredTriangleRemover()
         self.alternate_keys = {
             'forward': pygame.K_UP,
             'backward': pygame.K_DOWN,
@@ -39,6 +41,7 @@ class EventHandler:
             'help': pygame.K_F1,
             'check_edge': pygame.K_F11,
             'remove_internal_edges': pygame.K_F12,
+            'remove_covered': pygame.K_F4,
         }
         self.rotation_speed = 0.1
 
@@ -171,6 +174,9 @@ class EventHandler:
                         continue
                     if (('remove_internal_edges' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_internal_edges'])) or event.key == self.alternate_keys['remove_internal_edges']:
                         self.remove_internal_edges_via_raycasts()
+                        continue
+                    if (('remove_covered' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_covered'])) or event.key == self.alternate_keys['remove_covered']:
+                        self.covered_triangle_remover.remove_fully_covered_triangles(self.game)
                         continue
                 # Swallow all other events while in cleanup mode
                 continue
@@ -575,6 +581,11 @@ class EventHandler:
                 if (('remove_internal_edges' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_internal_edges'])) or event.key == self.alternate_keys['remove_internal_edges']:
                     if getattr(self.game, 'cleanup_mode', False):
                         self.remove_internal_edges_via_raycasts()
+                    else:
+                        self.game.set_status(f"Cleanup tools are in Cleanup Mode. Press {keybindings.get('cleanup_mode','u').upper()} to toggle.", 240)
+                if (('remove_covered' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_covered'])) or event.key == self.alternate_keys['remove_covered']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.covered_triangle_remover.remove_fully_covered_triangles(self.game)
                     else:
                         self.game.set_status(f"Cleanup tools are in Cleanup Mode. Press {keybindings.get('cleanup_mode','u').upper()} to toggle.", 240)
             elif event.type == pygame.MOUSEWHEEL:
@@ -1913,6 +1924,8 @@ class EventHandler:
         self.game.set_status(f"Removed {removed_tris} triangles from {internal_edge_count} internal edge(s)", 300)
         # Clear last selected after geometry changes
         self.game.last_selected_vertex_index = None
+
+    
 
     def delete_selected_vertices(self):
         if not self.game.selected_vertices:

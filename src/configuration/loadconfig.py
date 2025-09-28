@@ -47,4 +47,7 @@ if 'undo' not in keybindings:
 if 'cleanup_mode' not in keybindings:
     # Toggle cleanup mode on/off
     keybindings['cleanup_mode'] = 'u'
+# Default key for removing fully covered triangles (cleanup mode only)
+if 'remove_covered' not in keybindings:
+    keybindings['remove_covered'] = 'f4'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

@@ -482,6 +482,7 @@ class UIOverlayCreator:
             f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
             "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
             f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
+            f"Remove Triangles Covered by Others: {keybindings.get('remove_covered', 'f4').upper()} or F4",
             f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             f"Help: {keybindings['help'].upper()} or F1 to close",
         ]
