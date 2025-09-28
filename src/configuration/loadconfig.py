@@ -43,4 +43,8 @@ if 'shape_ngon' not in keybindings:
 # Default Undo key (plain 'z'); Ctrl+Z is always supported in code regardless of this
 if 'undo' not in keybindings:
     keybindings['undo'] = 'z'
+# Default Cleanup Mode toggle if not provided
+if 'cleanup_mode' not in keybindings:
+    # Toggle cleanup mode on/off
+    keybindings['cleanup_mode'] = 'u'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

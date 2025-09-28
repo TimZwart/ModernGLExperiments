@@ -140,6 +140,40 @@ class EventHandler:
                         continue
                 # Swallow all other events while in shape entry flow
                 continue
+            # Modal: Cleanup Mode swallows all but its own keys and QUIT
+            if getattr(self.game, 'cleanup_mode', False):
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    mods = pygame.key.get_mods()
+                    # Allow global Undo during cleanup
+                    if (mods & pygame.KMOD_CTRL) and (event.key == pygame.K_z):
+                        self.game.undo_last_action()
+                        continue
+                    if event.key == pygame.key.key_code(keybindings.get('undo', 'z')):
+                        self.game.undo_last_action()
+                        continue
+                    # Toggle cleanup mode
+                    if event.key == pygame.key.key_code(keybindings.get('cleanup_mode', 'u')):
+                        self.toggle_cleanup_mode()
+                        continue
+                    # Toggle help
+                    if (event.key == pygame.key.key_code(keybindings['help'])) or (event.key == self.alternate_keys['help']):
+                        self.game.help_mode = not self.game.help_mode
+                        continue
+                    # Cleanup actions only
+                    if (('remove_backfaces' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_backfaces'])) or event.key == self.alternate_keys['remove_backfaces']:
+                        self.remove_backfacing_triangles()
+                        continue
+                    if (('check_edge' in keybindings) and event.key == pygame.key.key_code(keybindings['check_edge'])) or event.key == self.alternate_keys['check_edge']:
+                        self.check_selected_edge_exists()
+                        continue
+                    if (('remove_internal_edges' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_internal_edges'])) or event.key == self.alternate_keys['remove_internal_edges']:
+                        self.remove_internal_edges_via_raycasts()
+                        continue
+                # Swallow all other events while in cleanup mode
+                continue
             # While entering a new vertex's coordinates/colors, handle only text/mouse for those fields and QUIT
             if self.game.add_vertex_mode:
                 if event.type == pygame.QUIT:
@@ -319,7 +353,7 @@ class EventHandler:
                     self.mouse_button_rotation_held = False
 
             elif event.type == pygame.MOUSEMOTION:
-                if self.mouse_button_rotation_held or self.rotate_key_held:
+                if (self.mouse_button_rotation_held or self.rotate_key_held) and (not getattr(self.game, 'cleanup_mode', False)):
                     dx, dy = event.rel
                     sensitivity = 0.005  # Adjust sensitivity as needed
                     self.game.camera.yaw(-dx * sensitivity)
@@ -339,7 +373,14 @@ class EventHandler:
                     continue
                 # Toggle shapes mode irrespective of other modes except text editing ones handled above
                 if event.key == pygame.key.key_code(keybindings.get('shapes_mode', 'm')):
-                    self.toggle_shapes_mode()
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Cleanup Mode is ON. Toggle it off to use Shapes Mode.", 180)
+                    else:
+                        self.toggle_shapes_mode()
+                    continue
+                # Toggle Cleanup Mode (only when not in text edit modals handled above)
+                if event.key == pygame.key.key_code(keybindings.get('cleanup_mode', 'u')):
+                    self.toggle_cleanup_mode()
                     continue
                 if self.game.filename_edit_mode:
                     if event.key == pygame.K_RETURN:
@@ -379,7 +420,7 @@ class EventHandler:
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
                 # Do not engage rotate when in shapes mode to allow key reuse (e.g., 'r' for Rectangle)
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
-                    if not getattr(self.game, 'shapes_mode', False):
+                    if not getattr(self.game, 'shapes_mode', False) and not getattr(self.game, 'cleanup_mode', False):
                         self.rotate_key_held = True
                 # Shape entry hotkeys only active when shapes mode is enabled
                 if getattr(self.game, 'shapes_mode', False):
@@ -390,7 +431,10 @@ class EventHandler:
                         self.start_ngon_flow()
                         continue
 
-                if event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']:
+                if (event.key == pygame.key.key_code(keybindings['add_vertex']) or event.key == self.alternate_keys['add_vertex']):
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status(f"Cleanup Mode is ON. Toggle it off with {keybindings.get('cleanup_mode','u').upper()} to add vertices.", 240)
+                        continue
                     # Enter add-vertex input mode; prefill from last selected when possible
                     self.game.add_vertex_mode = True
                     pos_str, col_str = self._get_add_vertex_default_texts()
@@ -403,6 +447,9 @@ class EventHandler:
                 if event.key == pygame.key.key_code(keybindings['save_vertices']) or event.key == self.alternate_keys['save_vertices']:
                     self.save_vertices()
                 if (('extrude' in keybindings) and event.key == pygame.key.key_code(keybindings['extrude'])):
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status(f"Cleanup Mode is ON. Toggle it off with {keybindings.get('cleanup_mode','u').upper()} to extrude.", 240)
+                        continue
                     if len(self.game.selected_vertices) == 0:
                         self.game.set_status("Select vertices to extrude", 180)
                     else:
@@ -418,69 +465,118 @@ class EventHandler:
                             self.game.extrude_base_point = [float(base_point[0]), float(base_point[1]), float(base_point[2])]
                             self.game.yellow_highlights = {base_idx}
                 if event.key == pygame.key.key_code(keybindings['change_filename']) or event.key == self.alternate_keys['change_filename']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status(f"Cleanup Mode is ON. Toggle it off with {keybindings.get('cleanup_mode','u').upper()} to edit filename.", 240)
+                        continue
                     self.game.filename_edit_mode = True
                     self.game.filename_edit_purpose = 'save'
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if (('new_file' in keybindings) and event.key == pygame.key.key_code(keybindings['new_file'])) or event.key == self.alternate_keys['new_file']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status(f"Cleanup Mode is ON. Toggle it off with {keybindings.get('cleanup_mode','u').upper()} to create a new file.", 240)
+                        continue
                     self.game.filename_edit_mode = True
                     self.game.filename_edit_purpose = 'new'
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if (('open_file' in keybindings) and event.key == pygame.key.key_code(keybindings['open_file'])) or event.key == self.alternate_keys['open_file']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status(f"Cleanup Mode is ON. Toggle it off with {keybindings.get('cleanup_mode','u').upper()} to open files.", 240)
+                        continue
                     self.start_file_picker()
                     self.mouse_button_rotation_held = False
                     self.rotate_key_held = False
                 if event.key == pygame.key.key_code(keybindings['form_triangles']) or event.key == self.alternate_keys['form_triangles']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status(f"Cleanup Mode is ON. Toggle it off with {keybindings.get('cleanup_mode','u').upper()} to form triangles.", 240)
+                        continue
                     self.triangle_filler.form_triangles_from_selected()
                 if (('remove_backfaces' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_backfaces'])) or event.key == self.alternate_keys['remove_backfaces']:
-                    self.remove_backfacing_triangles()
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.remove_backfacing_triangles()
+                    else:
+                        self.game.set_status(f"Cleanup tools are in Cleanup Mode. Press {keybindings.get('cleanup_mode','u').upper()} to toggle.", 240)
                 if event.key == pygame.key.key_code(keybindings['forward']) or event.key == self.alternate_keys['forward']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Movement disabled in Cleanup Mode.", 120)
+                        continue
                     if self.game.relative_movement:
                         self.game.camera.relative_forward()
                     else:
                         self.game.camera.forward()
                 if event.key == pygame.key.key_code(keybindings['backward']) or event.key == self.alternate_keys['backward']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Movement disabled in Cleanup Mode.", 120)
+                        continue
                     if self.game.relative_movement:
                         self.game.camera.relative_backward()
                     else:
                         self.game.camera.backward()
                 if event.key == pygame.key.key_code(keybindings['left']) or event.key == self.alternate_keys['left']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Movement disabled in Cleanup Mode.", 120)
+                        continue
                     if self.game.relative_movement:
                         self.game.camera.relative_left()
                     else:
                         self.game.camera.left()
                 if event.key == pygame.key.key_code(keybindings['right']) or event.key == self.alternate_keys['right']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Movement disabled in Cleanup Mode.", 120)
+                        continue
                     if self.game.relative_movement:
                         self.game.camera.relative_right()
                     else:
                         self.game.camera.right()
                 if event.key == pygame.key.key_code(keybindings['up']) or event.key == self.alternate_keys['up']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Movement disabled in Cleanup Mode.", 120)
+                        continue
                     if self.game.relative_movement:
                         self.game.camera.relative_upwards()
                     else:
                         self.game.camera.upwards()
                 if event.key == pygame.key.key_code(keybindings['down']) or event.key == self.alternate_keys['down']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Movement disabled in Cleanup Mode.", 120)
+                        continue
                     if self.game.relative_movement:
                         self.game.camera.relative_downwards()
                     else:
                         self.game.camera.downwards()
                 if event.key == pygame.key.key_code(keybindings['yaw_left']) or event.key == self.alternate_keys['yaw_left']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        continue
                     self.game.camera.yaw(self.rotation_speed)
                 if event.key == pygame.key.key_code(keybindings['yaw_right']) or event.key == self.alternate_keys['yaw_right']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        continue
                     self.game.camera.yaw(-self.rotation_speed)
                 if event.key == pygame.key.key_code(keybindings['pitch_up']) or event.key == self.alternate_keys['pitch_up']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        continue
                     self.game.camera.pitch(self.rotation_speed)
                 if event.key == pygame.key.key_code(keybindings['pitch_down']) or event.key == self.alternate_keys['pitch_down']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        continue
                     self.game.camera.pitch(-self.rotation_speed)
                 if event.key == pygame.key.key_code(keybindings['toggle_wireframe']) or event.key == self.alternate_keys['toggle_wireframe']:
+                    if getattr(self.game, 'cleanup_mode', False):
+                        continue
                     self.game.renderer.renderer3D.toggle_wireframe()
                 if event.key == pygame.key.key_code(keybindings['help']) or event.key == self.alternate_keys['help']:
                     self.game.help_mode = not self.game.help_mode
                 if (('check_edge' in keybindings) and event.key == pygame.key.key_code(keybindings['check_edge'])) or event.key == self.alternate_keys['check_edge']:
-                    self.check_selected_edge_exists()
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.check_selected_edge_exists()
+                    else:
+                        self.game.set_status(f"Cleanup tools are in Cleanup Mode. Press {keybindings.get('cleanup_mode','u').upper()} to toggle.", 240)
                 if (('remove_internal_edges' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_internal_edges'])) or event.key == self.alternate_keys['remove_internal_edges']:
-                    self.remove_internal_edges_via_raycasts()
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.remove_internal_edges_via_raycasts()
+                    else:
+                        self.game.set_status(f"Cleanup tools are in Cleanup Mode. Press {keybindings.get('cleanup_mode','u').upper()} to toggle.", 240)
             elif event.type == pygame.MOUSEWHEEL:
                 self.handle_scroll(event.y)
         
@@ -1292,9 +1388,8 @@ class EventHandler:
             # Restore selection
             self.game.selected_vertices = saved_selection
 
-        # After using the generic filling, skip the raycast cleanup which can be aggressive
-        # and may remove freshly created boundary faces.
-        if not used_fallback_for_sides:
+        # After using the generic filling, optionally run raycast cleanup only in Cleanup Mode
+        if (not used_fallback_for_sides) and getattr(self.game, 'cleanup_mode', False):
             self.remove_internal_edges_via_raycasts()
 
         # Remove the raw extruded copy rows (they were only used as positional sources for triangulation)
@@ -1616,6 +1711,28 @@ class EventHandler:
         print(f"Fixed winding for {flipped} inward-facing triangle(s).")
         # Clear last selected after geometry reorientation
         self.game.last_selected_vertex_index = None
+
+    def toggle_cleanup_mode(self):
+        # Exit conflicting modes when entering cleanup
+        self.game.cleanup_mode = not self.game.cleanup_mode
+        if self.game.cleanup_mode:
+            # Clear text edit modes and rotation states
+            self.game.add_vertex_mode = False
+            self.game.filename_edit_mode = False
+            self.game.edit_mode = False
+            self.game.extrude_mode = False
+            # Exit shapes mode and clear any shape flow
+            if getattr(self.game, 'shapes_mode', False):
+                try:
+                    self.cancel_shape_flow(clear_error=True)
+                except Exception:
+                    pass
+                self.game.shapes_mode = False
+            self.mouse_button_rotation_held = False
+            self.rotate_key_held = False
+            self.game.set_status("Cleanup Mode ON", 120)
+        else:
+            self.game.set_status("Cleanup Mode OFF", 120)
 
     def check_selected_edge_exists(self):
         rows = verticesHolder.vertices.reshape(-1, 6)

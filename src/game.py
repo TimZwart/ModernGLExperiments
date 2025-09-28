@@ -97,6 +97,9 @@ class Game:
         self.file_picker_max_visible = 12
         self.file_picker_item_rects = []
 
+        # Cleanup mode state
+        self.cleanup_mode = False
+
     def random_color(self):
         return [random.random() for _ in range(3)]
 

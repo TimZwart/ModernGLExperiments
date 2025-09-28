@@ -88,7 +88,9 @@ class UIOverlayCreator:
             self.overlay.blit(hint_surf, (panel_x + 10, panel_y + panel_h - 24))
             return
         if self.game.help_mode:
-            if getattr(self.game, 'shapes_mode', False):
+            if getattr(self.game, 'cleanup_mode', False):
+                self.draw_cleanup_help_screen()
+            elif getattr(self.game, 'shapes_mode', False):
                 self.draw_shapes_help_screen()
             else:
                 self.draw_help_screen()
@@ -249,6 +251,11 @@ class UIOverlayCreator:
             # Default help prompt position when not in shapes mode
             help_prompt = self.font.render(f"Press {keybindings['help'].upper()} for help", True, (0, 255, 255))
             self.overlay.blit(help_prompt, (10, self.height - 110))
+
+        # Cleanup Mode banner
+        if getattr(self.game, 'cleanup_mode', False):
+            banner = self.font.render("Cleanup Mode", True, (255, 200, 0))
+            self.overlay.blit(banner, (self.game.extrude_rect.left, (add_rect_top - 35) + 30))
 
         # Axis guides at base vertex during rectangle two-vertex 'direction' step
         try:
@@ -418,10 +425,6 @@ class UIOverlayCreator:
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
             f"Open File: {keybindings.get('open_file', 'b').upper()} or F3",
             f"Fill with triangles between selected points: {keybindings['form_triangles'].upper()} or F7",
-            f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
-            f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
-            "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
-            f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
             f"Extrude selected: {keybindings.get('extrude', 'e').upper()} (enter P' [x, y, z])",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
@@ -432,6 +435,7 @@ class UIOverlayCreator:
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
             f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
+            f"Toggle Cleanup Mode (enter/exit): {keybindings.get('cleanup_mode', 'u').upper()}",
             "Edit selected vertex: click its line or red box,",
             "  then edit position [x, y, z] and color [r, g, b]",
             "  Tab to switch fields, Enter to apply",
@@ -461,6 +465,24 @@ class UIOverlayCreator:
             f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             "Confirm current field: Enter",
             "Edit current field: Backspace",
+            f"Help: {keybindings['help'].upper()} or F1 to close",
+        ]
+        y = 20
+        for text in texts:
+            surf = font.render(text, True, (255, 255, 255))
+            self.overlay.blit(surf, (20, y))
+            y += 30
+
+    def draw_cleanup_help_screen(self):
+        font = pygame.font.Font(None, 24)
+        texts = [
+            "Cleanup Mode:",
+            f"Toggle Cleanup Mode (enter/exit): {keybindings.get('cleanup_mode', 'u').upper()}",
+            f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
+            f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
+            "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
+            f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
+            f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             f"Help: {keybindings['help'].upper()} or F1 to close",
         ]
         y = 20
