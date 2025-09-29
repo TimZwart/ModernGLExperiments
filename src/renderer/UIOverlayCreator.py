@@ -31,6 +31,39 @@ class UIOverlayCreator:
         except Exception:
             return "[r, g, b]"
 
+    def _ellipsize_path(self, path: str, max_width: int) -> str:
+        """Return a version of the path that fits within max_width using ellipsis.
+        Prefers keeping the filename (tail) visible.
+        """
+        try:
+            if max_width <= 0:
+                return "..."
+            if self.font.size(path)[0] <= max_width:
+                return path
+            ellipsis = "..."
+            base = os.path.basename(path) or path
+            # If we can show at least the filename with an ellipsis prefix, prefer that
+            candidate = ellipsis + base
+            if self.font.size(candidate)[0] <= max_width:
+                return candidate
+            # Otherwise, shorten the filename itself from the left side
+            # Binary search the longest tail of base that fits with ellipsis
+            low, high = 0, len(base)
+            best = ellipsis
+            while low <= high:
+                mid = (low + high) // 2
+                tail = base[-mid:] if mid > 0 else ""
+                cand = ellipsis + tail
+                w = self.font.size(cand)[0]
+                if w <= max_width:
+                    best = cand
+                    low = mid + 1
+                else:
+                    high = mid - 1
+            return best
+        except Exception:
+            return "..."
+
     def get_vertex_rect(self, index, y_position):
         vertex_text = f"Vertex {index}: {verticesHolder.vertices[index * 6:index * 6 + 3]}"
         text_width, text_height = self.font.size(vertex_text)
@@ -104,8 +137,14 @@ class UIOverlayCreator:
             status_surface = self.font.render(msg_text, True, (0, 255, 0))
             self.overlay.blit(status_surface, (10, 25))
         # Help prompt will be drawn later, after layout calculations, to avoid overlap with shapes inputs
-        filename_text = self.font.render(f"{self.game.filename_text}", True, (255, 255, 0))
-        self.overlay.blit(filename_text, (160, 10))
+        # Ensure the filepath fits on screen by ellipsizing if necessary
+        left_x = 160
+        right_margin = 10
+        max_w = max(0, self.width - right_margin - left_x)
+        # Filename uses full available width; warning will be placed on next line
+        display_path = self._ellipsize_path(f"{self.game.filename_text}", max_w)
+        filename_text = self.font.render(display_path, True, (255, 255, 0))
+        self.overlay.blit(filename_text, (left_x, 10))
         
         # Create a clickable area for each vertex (hidden while in shapes mode)
         self.vertex_rects = []
@@ -117,8 +156,9 @@ class UIOverlayCreator:
             trailing_indices = list(range(total_vertices - trailing_count, total_vertices)) if total_vertices >= trailing_count else []
             warn_text = f"Warning: {trailing_count} stray vertex" + ("" if trailing_count == 1 else "ices") + "; last triangle incomplete"
             warn_surface = self.font.render(warn_text, True, (255, 200, 0))
-            # Top-right corner to avoid overlapping main UI
-            self.overlay.blit(warn_surface, (max(10, self.width - 360), 10))
+            # Place warning below filename line, aligned with filename column
+            warn_y = 10 + self.font.get_height() + 4
+            self.overlay.blit(warn_surface, (left_x, warn_y))
         if not getattr(self.game, 'shapes_mode', False):
             for i in range(self.scroll_offset, min(self.scroll_offset + self.max_visible_vertices, total_vertices)):
                 vertex_text = f"Vertex {i}: {verticesHolder.vertices[i * 6:i * 6 + 3]}"
