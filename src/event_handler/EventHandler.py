@@ -1608,6 +1608,23 @@ class EventHandler:
                     self.game.selected_vertices = {actual_index}
                 # Track last interacted vertex from the list click
                 self.game.last_selected_vertex_index = actual_index
+                # Sync edit mode and input fields to reflect the new selection
+                if len(self.game.selected_vertices) == 1:
+                    # Enter/refresh edit mode and prefill both fields
+                    self.game.edit_mode = True
+                    try:
+                        self._prefill_edit_fields(actual_index)
+                    except Exception:
+                        # On any failure, fall back to clearing fields but keep mode
+                        self.game.edit_pos_text = "[0.000, 0.000, 0.000]"
+                        self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+                        self.game.edit_focus = 'pos'
+                else:
+                    # Multi-select or empty selection: exit edit mode and clear fields
+                    self.game.edit_mode = False
+                    self.game.edit_text = ""
+                    self.game.edit_pos_text = ""
+                    self.game.edit_color_text = ""
                 return True
         return False
 
