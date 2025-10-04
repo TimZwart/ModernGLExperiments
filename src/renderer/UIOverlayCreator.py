@@ -199,6 +199,10 @@ class UIOverlayCreator:
         else:
             # No hint text; covered by help screen
             pygame.draw.rect(self.overlay, (80, 80, 80), self.game.filename_rect, 1)
+        
+        # Color picker modal overlay
+        if getattr(self.game, 'color_picker_mode', False):
+            self.draw_color_picker()
         # Add-vertex input field above unified area
         add_rect_top = unified_top - 35
         self.game.add_vertex_rect.topleft = (10, add_rect_top)
@@ -458,6 +462,7 @@ class UIOverlayCreator:
             f"Down: {keybindings['down'].upper()} or Page Down",
             f"Add Vertex: {keybindings['add_vertex'].upper()} or Insert",
             "  then enter position [x, y, z] and color [r, g, b]",
+            "  or press C to open color picker",
             "Delete Selected: Delete",
             f"Clear All Vertices: {keybindings.get('clear_vertices', 'x').upper()}",
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
@@ -472,12 +477,13 @@ class UIOverlayCreator:
             f"Pitch Down: {keybindings['pitch_down'].upper()} or Numpad 2",
             f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
             f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
+            f"Color Picker: {keybindings.get('color_picker', 'c').upper()} (predefined colors)",
             f"Help: {keybindings['help'].upper()} or F1",
             rotate_help,
             f"Toggle Shapes Mode (enter/exit): {keybindings.get('shapes_mode', 'm').upper()}",
             f"Toggle Cleanup Mode (enter/exit): {keybindings.get('cleanup_mode', 'u').upper()}",
             "Edit selected vertex: click its line or red box,",
-            "  then edit position [x, y, z] and color [r, g, b]",
+            "  then edit position [x, y, z] and color [r, g, b] or use C",
             "  Tab to switch fields, Enter to apply",
             "Press H or F1 again to close help",
         ]
@@ -531,3 +537,75 @@ class UIOverlayCreator:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
+    
+    def draw_color_picker(self):
+        """Draw the color picker modal overlay with predefined colors."""
+        # Calculate layout: 4 columns, rows as needed
+        colors_per_col = 4
+        color_names = list(self.game.predefined_colors.keys())
+        num_rows = (len(color_names) + colors_per_col - 1) // colors_per_col
+        
+        # Calculate panel size needed
+        square_size = 40
+        spacing = 10
+        text_height = 25
+        cols = colors_per_col
+        panel_w = cols * square_size + (cols + 1) * spacing
+        panel_h = num_rows * square_size + (num_rows + 1) * spacing + text_height + 20
+        
+        # Position panel in center
+        panel_x = (self.width - panel_w) // 2
+        panel_y = (self.height - panel_h) // 2
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+        
+        # Dim background
+        dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 160))
+        self.overlay.blit(dim, (0, 0))
+        
+        # Draw panel
+        pygame.draw.rect(self.overlay, (40, 40, 40), panel_rect)
+        pygame.draw.rect(self.overlay, (200, 200, 200), panel_rect, 2)
+        
+        # Title
+        title_surf = self.font.render("Select Color", True, (255, 255, 255))
+        self.overlay.blit(title_surf, (panel_x + 10, panel_y + 8))
+        
+        # Reset color picker rects for click detection
+        self.game.color_picker_rects = []
+        
+        # Draw color squares
+        square_x = panel_x + spacing
+        square_y = panel_y + text_height + 15
+        
+        for i, (color_name, rgb_values) in enumerate(self.game.predefined_colors.items()):
+            row = i // colors_per_col
+            col = i % colors_per_col
+            
+            square_rect = pygame.Rect(
+                square_x + col * (square_size + spacing),
+                square_y + row * (square_size + spacing),
+                square_size,
+                square_size
+            )
+            
+            # Convert 0.0-1.0 RGB to 0-255 for pygame
+            pygame_color = tuple(int(c * 255) for c in rgb_values)
+            
+            # Draw color square
+            pygame.draw.rect(self.overlay, pygame_color, square_rect)
+            pygame.draw.rect(self.overlay, (200, 200, 200), square_rect, 2)
+            
+            # Draw color name (use white or black text based on brightness)
+            brightness = sum(pygame_color) // 3
+            text_color = (0, 0, 0) if brightness > 128 else (255, 255, 255)
+            
+            # Scale font down for color names
+            small_font = pygame.font.Font(None, 16)
+            name_surf = small_font.render(color_name, True, text_color)
+            text_pt_x = square_rect.centerx - name_surf.get_width() // 2
+            text_pt_y = square_rect.centery - name_surf.get_height() // 2
+            self.overlay.blit(name_surf, (text_pt_x, text_pt_y))
+            
+            # Store rect and color name for click detection
+            self.game.color_picker_rects.append((square_rect, color_name))

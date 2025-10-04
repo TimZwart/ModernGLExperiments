@@ -90,6 +90,10 @@ class Game:
 
         # File picker state
         self.file_picker_mode = False
+        
+        # Color picker state
+        self.color_picker_mode = False
+        self.color_picker_rects = []  # List of (rect, color_name) tuples for color selection
         self.file_picker_dir = ""
         self.file_picker_items = []  # full paths
         self.file_picker_index = 0
@@ -99,9 +103,33 @@ class Game:
 
         # Cleanup mode state
         self.cleanup_mode = False
+        
+        # Predefined colors (RGB values 0.0-1.0)
+        self.predefined_colors = {
+            'red': [1.0, 0.0, 0.0],
+            'green': [0.0, 1.0, 0.0], 
+            'blue': [0.0, 0.0, 1.0],
+            'yellow': [1.0, 1.0, 0.0],
+            'cyan': [0.0, 1.0, 1.0],
+            'magenta': [1.0, 0.0, 1.0],
+            'white': [1.0, 1.0, 1.0],
+            'black': [0.0, 0.0, 0.0],
+            'orange': [1.0, 0.5, 0.0],
+            'purple': [0.5, 0.0, 1.0],
+            'pink': [1.0, 0.75, 0.8],
+            'brown': [0.6, 0.3, 0.0],
+            'gray': [0.5, 0.5, 0.5],
+            'dark_red': [0.5, 0.0, 0.0],
+            'dark_green': [0.0, 0.5, 0.0],
+            'dark_blue': [0.0, 0.0, 0.5]
+        }
 
     def random_color(self):
         return [random.random() for _ in range(3)]
+    
+    def get_predefined_color(self, color_name):
+        """Get predefined color by name, or return random color if not found."""
+        return self.predefined_colors.get(color_name, self.random_color())
 
     def run(self):
         running = True

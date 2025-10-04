@@ -42,6 +42,7 @@ class EventHandler:
             'check_edge': pygame.K_F11,
             'remove_internal_edges': pygame.K_F12,
             'remove_covered': pygame.K_F4,
+            'color_picker': pygame.K_c,  # Color picker toggle
         }
         self.rotation_speed = 0.1
 
@@ -113,6 +114,46 @@ class EventHandler:
                     continue
                 # Swallow all other events while picker is open
                 continue
+            # Modal: Color picker has precedence over other inputs except QUIT and file picker
+            if getattr(self.game, 'color_picker_mode', False):
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.game.color_picker_mode = False
+                        continue
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    x, y = event.pos
+                    try:
+                        # Check if user clicked on a color in the picker
+                        for color_rect, color_name in self.game.color_picker_rects:
+                            if color_rect.collidepoint(x, y):
+                                # Apply the selected color
+                                self.game.current_color = self.game.predefined_colors[color_name].copy()
+                                # Update current color input field if we're in edit/add mode
+                                formatted_color = self._fmt_triplet(self.game.current_color)
+                                if hasattr(self.game, 'add_vertex_mode') and self.game.add_vertex_mode:
+                                    self.game.add_vertex_color_text = formatted_color
+                                    print(f"Updated add vertex color to: {formatted_color}")
+                                if hasattr(self.game, 'edit_mode') and self.game.edit_mode:
+                                    self.game.edit_color_text = formatted_color
+                                    print(f"Updated edit color to: {formatted_color}")
+                                # Ensure we remain in edit mode if exactly one vertex is selected
+                                try:
+                                    if len(getattr(self.game, 'selected_vertices', set())) == 1:
+                                        self.game.edit_mode = True
+                                except Exception:
+                                    pass
+                                print(f"Selected color '{color_name}': {self.game.current_color}")
+                                # Close the color picker
+                                self.game.color_picker_mode = False
+                                break
+                        continue
+                    except Exception:
+                        pass
+                # Swallow all other events while color picker is open
+                continue
             # Modal: Shapes input flows have precedence over other inputs except QUIT
             if getattr(self.game, 'shapes_mode', False) and getattr(self.game, 'shape_input_mode', None) is not None:
                 if event.type == pygame.QUIT:
@@ -127,6 +168,10 @@ class EventHandler:
                     # Allow help key during shape input flow to toggle shapes help screen
                     if (event.key == pygame.key.key_code(keybindings['help'])) or (event.key == self.alternate_keys['help']):
                         self.game.help_mode = not self.game.help_mode
+                        continue
+                    # Allow color picker during shape input flow
+                    if (event.key == pygame.key.key_code(keybindings.get('color_picker', 'c'))) or (event.key == self.alternate_keys.get('color_picker', pygame.K_c)):
+                        self.game.color_picker_mode = not self.game.color_picker_mode
                         continue
                     if event.key == pygame.K_ESCAPE:
                         # Abort current shape input flow, remain in shapes mode
@@ -164,6 +209,10 @@ class EventHandler:
                     # Toggle help
                     if (event.key == pygame.key.key_code(keybindings['help'])) or (event.key == self.alternate_keys['help']):
                         self.game.help_mode = not self.game.help_mode
+                        continue
+                    # Toggle color picker
+                    if (event.key == pygame.key.key_code(keybindings.get('color_picker', 'c'))) or (event.key == self.alternate_keys.get('color_picker', pygame.K_c)):
+                        self.game.color_picker_mode = not self.game.color_picker_mode
                         continue
                     # Cleanup actions only
                     if (('remove_backfaces' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_backfaces'])) or event.key == self.alternate_keys['remove_backfaces']:
@@ -396,26 +445,76 @@ class EventHandler:
                     else:
                         self.game.filename_text += event.unicode
                 elif self.game.edit_mode:
+                    # While editing, only allow: Enter (apply), Escape (cancel), Tab (switch field),
+                    # Backspace (edit), Color Picker toggle, Add-Vertex, and text input for the active field.
+                    # Swallow all other keys to avoid triggering unrelated actions (e.g., change filename).
+                    # Enter -> apply
                     if event.key == pygame.K_RETURN:
                         self.apply_edit()
-                    elif event.key == pygame.K_BACKSPACE:
+                        continue
+                    # Backspace -> edit
+                    if event.key == pygame.K_BACKSPACE:
                         if self.game.edit_focus == 'pos':
                             self.game.edit_pos_text = self.game.edit_pos_text[:-1]
                         else:
                             self.game.edit_color_text = self.game.edit_color_text[:-1]
-                    elif event.key == pygame.K_TAB:
+                        continue
+                    # Tab -> switch field
+                    if event.key == pygame.K_TAB:
                         self.game.edit_focus = 'color' if self.game.edit_focus == 'pos' else 'pos'
-                    elif event.key == pygame.K_ESCAPE:
-                        # Cancel edit of selected vertex
+                        continue
+                    # Escape -> cancel edit
+                    if event.key == pygame.K_ESCAPE:
                         self.game.edit_mode = False
                         self.game.edit_text = ""
                         self.game.edit_pos_text = ""
                         self.game.edit_color_text = ""
-                    else:
+                        continue
+                    # Color Picker toggle while editing
+                    try:
+                        if (('color_picker' in keybindings) and event.key == pygame.key.key_code(keybindings['color_picker'])) or \
+                           (event.key == self.alternate_keys.get('color_picker', -1)):
+                            # Ensure filename editor is closed to prevent conflicts
+                            self.game.filename_edit_mode = False
+                            self.game.color_picker_mode = not self.game.color_picker_mode
+                            # Keep edit mode active
+                            self.game.edit_mode = True
+                            continue
+                    except Exception:
+                        pass
+                    # Add-vertex key while editing (allowed)
+                    try:
+                        if (event.key == pygame.key.key_code(keybindings.get('add_vertex', 'insert'))) or \
+                           (event.key == self.alternate_keys.get('add_vertex', -1)):
+                            self.game.add_vertex_mode = True
+                            pos_str, col_str = self._get_add_vertex_default_texts()
+                            self.game.add_vertex_pos_text = pos_str
+                            # Prefill color with current field text if non-empty, else use default
+                            self.game.add_vertex_color_text = (self.game.edit_color_text or col_str)
+                            self.game.add_vertex_error = ""
+                            self.game.add_vertex_focus = 'pos'
+                            self.mouse_button_rotation_held = False
+                            self.rotate_key_held = False
+                            continue
+                    except Exception:
+                        pass
+                    # Default: treat as text input for the active field and swallow the key
+                    if event.unicode:
                         if self.game.edit_focus == 'pos':
                             self.game.edit_pos_text += event.unicode
                         else:
                             self.game.edit_color_text += event.unicode
+                    continue
+                # Fallback: if Enter is pressed with one selected vertex and pending edit fields,
+                # apply the edit even if edit_mode was toggled off unexpectedly.
+                elif event.key == pygame.K_RETURN:
+                    try:
+                        if (len(getattr(self.game, 'selected_vertices', set())) == 1) and \
+                           ((self.game.edit_pos_text or '').strip() or (self.game.edit_color_text or '').strip()):
+                            self.apply_edit()
+                            continue
+                    except Exception:
+                        pass
                 # Only allow deletion when not in any text-editing mode
                 if not (self.game.filename_edit_mode or self.game.add_vertex_mode or self.game.edit_mode):
                     if event.key == pygame.K_DELETE:
@@ -573,6 +672,9 @@ class EventHandler:
                     self.game.renderer.renderer3D.toggle_wireframe()
                 if event.key == pygame.key.key_code(keybindings['help']) or event.key == self.alternate_keys['help']:
                     self.game.help_mode = not self.game.help_mode
+                # Toggle color picker
+                if event.key == pygame.key.key_code(keybindings.get('color_picker', 'c')) or event.key == self.alternate_keys.get('color_picker', pygame.K_c):
+                    self.game.color_picker_mode = not self.game.color_picker_mode
                 if (('check_edge' in keybindings) and event.key == pygame.key.key_code(keybindings['check_edge'])) or event.key == self.alternate_keys['check_edge']:
                     if getattr(self.game, 'cleanup_mode', False):
                         self.check_selected_edge_exists()
@@ -1134,13 +1236,16 @@ class EventHandler:
                 px, py, pz = rows[selected, :3].astype(float)
             # Parse color (optional)
             color_text = (self.game.edit_color_text or "").strip()
+            print(f"Processing color text: '{color_text}'")
             if color_text:
                 col_list = ast.literal_eval(color_text)
                 if not (isinstance(col_list, (list, tuple)) and len(col_list) == 3):
                     raise ValueError("Enter [r, g, b] for color")
                 cr, cg, cb = float(col_list[0]), float(col_list[1]), float(col_list[2])
+                print(f"Parsed color from text: [{cr}, {cg}, {cb}]")
             else:
                 cr, cg, cb = rows[selected, 3:6].astype(float)
+                print(f"Using existing color: [{cr}, {cg}, {cb}]")
             # Snapshot before edit
             self.game.push_undo_snapshot("Edit vertex")
             rows[selected, :3] = [px, py, pz]
