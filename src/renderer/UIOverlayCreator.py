@@ -416,8 +416,28 @@ class UIOverlayCreator:
                     self.overlay.blit(color_surface, (self.game.edit_color_rect.left + 5, self.game.edit_color_rect.top + 5))
             else:
                 selected_list = sorted(list(self.game.selected_vertices))
-                selected_text = self.font.render(f"Selected Vertices: {selected_list}", True, (255, 255, 0))
-                self.overlay.blit(selected_text, (10, self.height - 50))
+                # Header showing which vertices are selected
+                header_text = self.font.render(f"Selected Vertices: {selected_list}", True, (255, 255, 0))
+                self.overlay.blit(header_text, (10, self.height - 80))
+
+                # When editing with multiple selected, show color-only field
+                if self.game.edit_mode:
+                    # Place color field at the standard input row
+                    self.game.edit_color_rect.top = self.height - 35
+                    self.game.edit_color_rect.left = 10
+                    try:
+                        color_label = self.font.render("color:", True, (255, 255, 0))
+                        self.overlay.blit(color_label, (self.game.edit_color_rect.left, max(0, self.game.edit_color_rect.top - 20)))
+                    except Exception:
+                        pass
+                    pygame.draw.rect(self.overlay, (255, 255, 0) if self.game.edit_focus == 'color' else (150, 150, 0), self.game.edit_color_rect, 2)
+                    color_text = self.game.edit_color_text if getattr(self.game, 'edit_color_text', "") else self._color_placeholder()
+                    color_surface = self.font.render(color_text, True, (255, 255, 0))
+                    self.overlay.blit(color_surface, (self.game.edit_color_rect.left + 5, self.game.edit_color_rect.top + 5))
+                else:
+                    # Non-editing summary line near bottom
+                    selected_text = self.font.render("Click the input area to edit color for all", True, (200, 200, 100))
+                    self.overlay.blit(selected_text, (10, self.height - 50))
 
         # Draw selected vertices markers
         if self.game.selected_vertices:

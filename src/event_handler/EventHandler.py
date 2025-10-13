@@ -365,10 +365,20 @@ class EventHandler:
                                 self.game.extrude_base_index = base_idx
                                 self.game.extrude_base_point = [float(base_point[0]), float(base_point[1]), float(base_point[2])]
                                 self.game.yellow_highlights = {base_idx}
-                    elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) == 1:
+                    elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) >= 1:
                         self.game.edit_mode = True
-                        selected = list(self.game.selected_vertices)[0]
-                        self._prefill_edit_fields(selected)
+                        if len(self.game.selected_vertices) == 1:
+                            selected = list(self.game.selected_vertices)[0]
+                            self._prefill_edit_fields(selected)
+                        else:
+                            # Multi-select: enable color-only edit; clear position field
+                            try:
+                                self.game.edit_pos_text = ""
+                                self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+                            except Exception:
+                                self.game.edit_pos_text = ""
+                                self.game.edit_color_text = "[1.000, 1.000, 1.000]"
+                            self.game.edit_focus = 'color'
                     elif self.game.edit_mode and self.game.edit_pos_rect and self.game.edit_pos_rect.collidepoint(x, y):
                         self.game.edit_focus = 'pos'
                     elif self.game.edit_mode and self.game.edit_color_rect and self.game.edit_color_rect.collidepoint(x, y):
@@ -1214,45 +1224,69 @@ class EventHandler:
         return nearest_index
 
     def apply_edit(self):
-        if len(self.game.selected_vertices) != 1:
-            print("Cannot edit multiple vertices")
+        selected_count = len(self.game.selected_vertices)
+        if selected_count == 0:
             self.game.edit_mode = False
             return
-        selected = list(self.game.selected_vertices)[0]
         try:
             rows = verticesHolder.vertices.reshape(-1, 6)
-            if not (0 <= selected < len(rows)):
-                print("Selected index out of bounds")
-                self.game.edit_mode = False
-                return
-            # Parse position
-            pos_text = (self.game.edit_pos_text or "").strip()
-            if pos_text:
-                pos_list = ast.literal_eval(pos_text)
-                if not (isinstance(pos_list, (list, tuple)) and len(pos_list) == 3):
-                    raise ValueError("Enter [x, y, z] for position")
-                px, py, pz = float(pos_list[0]), float(pos_list[1]), float(pos_list[2])
+            if selected_count == 1:
+                selected = list(self.game.selected_vertices)[0]
+                if not (0 <= selected < len(rows)):
+                    print("Selected index out of bounds")
+                    self.game.edit_mode = False
+                    return
+                # Parse position
+                pos_text = (self.game.edit_pos_text or "").strip()
+                if pos_text:
+                    pos_list = ast.literal_eval(pos_text)
+                    if not (isinstance(pos_list, (list, tuple)) and len(pos_list) == 3):
+                        raise ValueError("Enter [x, y, z] for position")
+                    px, py, pz = float(pos_list[0]), float(pos_list[1]), float(pos_list[2])
+                else:
+                    px, py, pz = rows[selected, :3].astype(float)
+                # Parse color (optional)
+                color_text = (self.game.edit_color_text or "").strip()
+                print(f"Processing color text: '{color_text}'")
+                if color_text:
+                    col_list = ast.literal_eval(color_text)
+                    if not (isinstance(col_list, (list, tuple)) and len(col_list) == 3):
+                        raise ValueError("Enter [r, g, b] for color")
+                    cr, cg, cb = float(col_list[0]), float(col_list[1]), float(col_list[2])
+                    print(f"Parsed color from text: [{cr}, {cg}, {cb}]")
+                else:
+                    cr, cg, cb = rows[selected, 3:6].astype(float)
+                    print(f"Using existing color: [{cr}, {cg}, {cb}]")
+                # Snapshot before edit
+                self.game.push_undo_snapshot("Edit vertex")
+                rows[selected, :3] = [px, py, pz]
+                rows[selected, 3:6] = [cr, cg, cb]
+                verticesHolder.vertices = rows.astype('f4').flatten()
+                self.game.current_color = [cr, cg, cb]
+                print(f"Updated vertex {selected} to pos={[px,py,pz]} color={[cr,cg,cb]}")
             else:
-                px, py, pz = rows[selected, :3].astype(float)
-            # Parse color (optional)
-            color_text = (self.game.edit_color_text or "").strip()
-            print(f"Processing color text: '{color_text}'")
-            if color_text:
+                # Multi-select: apply color to all selected vertices; ignore position
+                color_text = (self.game.edit_color_text or "").strip()
+                print(f"Processing bulk color text: '{color_text}' for {selected_count} vertices")
+                if not color_text:
+                    # Nothing to apply
+                    self.game.edit_mode = False
+                    self.game.edit_text = ""
+                    self.game.edit_pos_text = ""
+                    self.game.edit_color_text = ""
+                    return
                 col_list = ast.literal_eval(color_text)
                 if not (isinstance(col_list, (list, tuple)) and len(col_list) == 3):
                     raise ValueError("Enter [r, g, b] for color")
                 cr, cg, cb = float(col_list[0]), float(col_list[1]), float(col_list[2])
-                print(f"Parsed color from text: [{cr}, {cg}, {cb}]")
-            else:
-                cr, cg, cb = rows[selected, 3:6].astype(float)
-                print(f"Using existing color: [{cr}, {cg}, {cb}]")
-            # Snapshot before edit
-            self.game.push_undo_snapshot("Edit vertex")
-            rows[selected, :3] = [px, py, pz]
-            rows[selected, 3:6] = [cr, cg, cb]
-            verticesHolder.vertices = rows.astype('f4').flatten()
-            self.game.current_color = [cr, cg, cb]
-            print(f"Updated vertex {selected} to pos={[px,py,pz]} color={[cr,cg,cb]}")
+                # Snapshot before edit
+                self.game.push_undo_snapshot("Edit vertex colors")
+                indices = sorted(list(self.game.selected_vertices))
+                rows[indices, 3:6] = [cr, cg, cb]
+                verticesHolder.vertices = rows.astype('f4').flatten()
+                self.game.current_color = [cr, cg, cb]
+                print(f"Updated {len(indices)} vertices' colors to {[cr, cg, cb]}")
+            # Common tail: close UI and update buffer
             self.game.edit_mode = False
             self.game.edit_text = ""
             self.game.edit_pos_text = ""
