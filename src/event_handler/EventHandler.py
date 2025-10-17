@@ -237,6 +237,20 @@ class EventHandler:
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     x, y = event.pos
                     try:
+                        # Allow overriding to multi-select color edit if applicable
+                        if len(getattr(self.game, 'selected_vertices', set())) > 1 and \
+                           (self.game.edit_color_rect and self.game.edit_color_rect.collidepoint(x, y)):
+                            # Exit add mode and enter color-only edit
+                            self.game.add_vertex_mode = False
+                            self.game.filename_edit_mode = False
+                            self.game.edit_mode = True
+                            self.game.edit_pos_text = ""
+                            try:
+                                self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+                            except Exception:
+                                self.game.edit_color_text = "[1.000, 1.000, 1.000]"
+                            self.game.edit_focus = 'color'
+                            continue
                         if self.game.add_vertex_pos_rect and self.game.add_vertex_pos_rect.collidepoint(x, y):
                             self.game.add_vertex_focus = 'pos'
                         elif self.game.add_vertex_color_rect and self.game.add_vertex_color_rect.collidepoint(x, y):
@@ -316,6 +330,24 @@ class EventHandler:
                 if event.type == pygame.QUIT:
                     continue_running = False
                     continue
+                # Allow clicking multi-select color field to exit filename mode and start color edit
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    x, y = event.pos
+                    try:
+                        if len(getattr(self.game, 'selected_vertices', set())) > 1 and \
+                           (self.game.edit_color_rect and self.game.edit_color_rect.collidepoint(x, y)):
+                            self.game.filename_edit_mode = False
+                            self.game.edit_mode = True
+                            self.game.add_vertex_mode = False
+                            self.game.edit_pos_text = ""
+                            try:
+                                self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+                            except Exception:
+                                self.game.edit_color_text = "[1.000, 1.000, 1.000]"
+                            self.game.edit_focus = 'color'
+                            continue
+                    except Exception:
+                        pass
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         # Cancel filename edit
@@ -337,15 +369,33 @@ class EventHandler:
                     ctrl_pressed = mods & pygame.KMOD_CTRL
                     x, y = event.pos
                     if self.game.add_vertex_rect and self.game.add_vertex_rect.collidepoint(x, y):
-                        self.game.add_vertex_mode = True
-                        # Prefill with last selected vertex coords and current color
-                        pos_str, col_str = self._get_add_vertex_default_texts()
-                        self.game.add_vertex_pos_text = pos_str
-                        self.game.add_vertex_color_text = col_str
-                        self.game.add_vertex_error = ""
-                        self.game.add_vertex_focus = 'pos'
-                        self.mouse_button_rotation_held = False
-                        self.rotate_key_held = False
+                        # Do not open add-vertex fields while multi-select is active
+                        if len(self.game.selected_vertices) > 1:
+                            pass
+                        else:
+                            self.game.add_vertex_mode = True
+                            # Prefill with last selected vertex coords and current color
+                            pos_str, col_str = self._get_add_vertex_default_texts()
+                            self.game.add_vertex_pos_text = pos_str
+                            self.game.add_vertex_color_text = col_str
+                            self.game.add_vertex_error = ""
+                            self.game.add_vertex_focus = 'pos'
+                            self.mouse_button_rotation_held = False
+                            self.rotate_key_held = False
+                    # Prioritize multi-select color input click before filename area
+                    elif (not self.game.edit_mode) and (len(self.game.selected_vertices) > 1) and \
+                         (self.game.edit_color_rect and self.game.edit_color_rect.collidepoint(x, y)):
+                        # Enter color-only edit for multi-select; ensure other input modes are off
+                        self.game.edit_mode = True
+                        self.game.add_vertex_mode = False
+                        self.game.filename_edit_mode = False
+                        try:
+                            self.game.edit_pos_text = ""
+                            self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+                        except Exception:
+                            self.game.edit_pos_text = ""
+                            self.game.edit_color_text = "[1.000, 1.000, 1.000]"
+                        self.game.edit_focus = 'color'
                     # Disable click activation for open/save/new; use keybindings only
                     elif self.game.filename_rect and self.game.filename_rect.collidepoint(x, y):
                         pass
@@ -365,6 +415,9 @@ class EventHandler:
                                 self.game.extrude_base_index = base_idx
                                 self.game.extrude_base_point = [float(base_point[0]), float(base_point[1]), float(base_point[2])]
                                 self.game.yellow_highlights = {base_idx}
+                    # When multiple vertices are selected, allow clicking the visible color field
+                    # to enter color-only editing directly
+                    
                     elif self.game.edit_rect and self.game.edit_rect.collidepoint(x, y) and len(self.game.selected_vertices) >= 1:
                         self.game.edit_mode = True
                         if len(self.game.selected_vertices) == 1:

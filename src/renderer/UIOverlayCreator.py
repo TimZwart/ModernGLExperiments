@@ -435,9 +435,18 @@ class UIOverlayCreator:
                     color_surface = self.font.render(color_text, True, (255, 255, 0))
                     self.overlay.blit(color_surface, (self.game.edit_color_rect.left + 5, self.game.edit_color_rect.top + 5))
                 else:
-                    # Non-editing summary line near bottom
-                    selected_text = self.font.render("Click the input area to edit color for all", True, (200, 200, 100))
-                    self.overlay.blit(selected_text, (10, self.height - 50))
+                    # Show color-only input field (inactive) so it's visible/clickable
+                    self.game.edit_color_rect.top = self.height - 35
+                    self.game.edit_color_rect.left = 10
+                    try:
+                        color_label = self.font.render("color:", True, (180, 180, 100))
+                        self.overlay.blit(color_label, (self.game.edit_color_rect.left, max(0, self.game.edit_color_rect.top - 20)))
+                    except Exception:
+                        pass
+                    pygame.draw.rect(self.overlay, (80, 80, 80), self.game.edit_color_rect, 1)
+                    color_text = self._color_placeholder()
+                    color_surface = self.font.render(color_text, True, (180, 180, 100))
+                    self.overlay.blit(color_surface, (self.game.edit_color_rect.left + 5, self.game.edit_color_rect.top + 5))
 
         # Draw selected vertices markers
         if self.game.selected_vertices:
