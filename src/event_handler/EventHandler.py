@@ -49,6 +49,52 @@ class EventHandler:
     def handle_events(self):
         continue_running = True
         for event in pygame.event.get():
+            # If disambiguation modal is active, only handle its inputs
+            if getattr(self.game, 'disambiguation_mode', False):
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        # Cancel disambiguation
+                        self._end_disambiguation(None)
+                        continue
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        if self.game.disambiguation_candidates:
+                            self.game.disambiguation_selected = (self.game.disambiguation_selected - 1) % len(self.game.disambiguation_candidates)
+                        continue
+                    if event.key in (pygame.K_DOWN, pygame.K_s):
+                        if self.game.disambiguation_candidates:
+                            self.game.disambiguation_selected = (self.game.disambiguation_selected + 1) % len(self.game.disambiguation_candidates)
+                        continue
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        idx = None
+                        if self.game.disambiguation_candidates:
+                            idx = self.game.disambiguation_candidates[self.game.disambiguation_selected]
+                        self._end_disambiguation(idx)
+                        continue
+                    # Number keys 1..9 choose directly
+                    if pygame.K_1 <= event.key <= pygame.K_9:
+                        choice = event.key - pygame.K_1
+                        if 0 <= choice < len(self.game.disambiguation_candidates):
+                            idx = self.game.disambiguation_candidates[choice]
+                            self._end_disambiguation(idx)
+                        continue
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    # Click on an option row
+                    x, y = event.pos
+                    try:
+                        for i, rect in enumerate(getattr(self.game, 'disambiguation_item_rects', [])):
+                            if rect.collidepoint(x, y):
+                                if 0 <= i < len(self.game.disambiguation_candidates):
+                                    idx = self.game.disambiguation_candidates[i]
+                                    self._end_disambiguation(idx)
+                                break
+                    except Exception:
+                        pass
+                    continue
+                # Swallow other events
+                continue
             # Modal: File picker has precedence over everything except QUIT
             if getattr(self.game, 'file_picker_mode', False):
                 if event.type == pygame.QUIT:
@@ -439,7 +485,13 @@ class EventHandler:
                     elif self.handle_vertex_list_click(x, y, ctrl_pressed):
                         pass # Vertex in the list was clicked, no need to do anything else
                     else:
-                        nearest_vertex = self.find_nearest_vertex(x, y)
+                        nearest_vertex, ambiguous = self.find_nearest_vertex_with_ambiguity(x, y)
+                        if ambiguous and len(ambiguous) > 1:
+                            # Start disambiguation modal
+                            ctrl_pressed_bool = bool(ctrl_pressed)
+                            self.start_disambiguation(ambiguous, ctrl_pressed_bool)
+                            # Do not change current selection yet
+                            continue
                         if nearest_vertex is not None:
                             if ctrl_pressed:
                                 if nearest_vertex in self.game.selected_vertices:
@@ -1275,6 +1327,79 @@ class EventHandler:
         print(f"Selected vertex index: {nearest_index}")
         
         return nearest_index
+
+    def find_nearest_vertex_with_ambiguity(self, x, y):
+        if verticesHolder.vertices.size == 0:
+            return None, []
+        vertices = verticesHolder.vertices.reshape(-1, 6)
+        screen_coords = self.game.renderer.renderer3D.world_to_screen(vertices[:, :3])
+        distances = np.sqrt(np.sum((screen_coords - np.array([x, y])) ** 2, axis=1))
+        nearest_index = int(np.argmin(distances))
+        nearest_distance = float(distances[nearest_index])
+        max_distance = 500
+        if nearest_distance > max_distance:
+            return None, []
+        # Determine ambiguous: all vertices whose world positions equal the nearest one (within tolerance)
+        tol = 1e-6
+        target_pos = vertices[nearest_index, :3]
+        diffs = np.abs(vertices[:, :3] - target_pos)
+        same_mask = (diffs[:, 0] <= tol) & (diffs[:, 1] <= tol) & (diffs[:, 2] <= tol)
+        candidates = np.where(same_mask)[0].tolist()
+        # Sort candidates by distance so the top is the closest in screen-space
+        candidates.sort(key=lambda i: distances[i])
+        if len(candidates) > 1:
+            return nearest_index, candidates
+        return nearest_index, []
+
+    def start_disambiguation(self, candidates:list, ctrl_pressed:bool):
+        try:
+            self.game.disambiguation_mode = True
+            self.game.disambiguation_candidates = list(candidates)
+            self.game.disambiguation_selected = 0
+            self.game.disambiguation_item_rects = []
+            self.game.disambiguation_ctrl_pressed = bool(ctrl_pressed)
+            # Highlight triangles that include these candidate vertices
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            tri_count = len(rows) // 3
+            highlight_indices = set()
+            candidate_set = set(candidates)
+            for t in range(tri_count):
+                i0 = t * 3
+                tri_indices = {i0 + 0, i0 + 1, i0 + 2}
+                if tri_indices & candidate_set:
+                    highlight_indices.update(tri_indices)
+            self.game.yellow_highlights = highlight_indices
+            self.game.set_status("Multiple vertices here. Choose one (1-9, arrows+Enter, click)", 240)
+        except Exception:
+            # Fail safe: if something goes wrong, fall back to selecting the first
+            if candidates:
+                self._end_disambiguation(candidates[0])
+
+    def _end_disambiguation(self, chosen_index:int|None):
+        try:
+            self.game.disambiguation_mode = False
+            self.game.disambiguation_item_rects = []
+            self.game.disambiguation_ctrl_pressed = False
+            # Keep highlights only for a short while? Clear now to avoid confusion
+            self.game.yellow_highlights = set()
+            if chosen_index is None:
+                self.game.set_status("Selection cancelled", 120)
+                return
+            # Apply as if user clicked this vertex
+            if self.game.disambiguation_ctrl_pressed:
+                if chosen_index in self.game.selected_vertices:
+                    self.game.selected_vertices.remove(chosen_index)
+                else:
+                    self.game.selected_vertices.add(chosen_index)
+            else:
+                self.game.selected_vertices = {chosen_index}
+            self.game.last_selected_vertex_index = chosen_index
+            # Enter/refresh edit mode if single
+            if len(self.game.selected_vertices) == 1:
+                self.game.edit_mode = True
+                self._prefill_edit_fields(chosen_index)
+        except Exception:
+            pass
 
     def apply_edit(self):
         selected_count = len(self.game.selected_vertices)
