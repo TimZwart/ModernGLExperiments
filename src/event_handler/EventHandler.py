@@ -1375,6 +1375,9 @@ class EventHandler:
             self.game.disambiguation_selected = 0
             self.game.disambiguation_item_rects = []
             self.game.disambiguation_ctrl_pressed = bool(ctrl_pressed)
+            # Snapshot prior selection and intended action
+            self.game.disambiguation_prev_selection = set(self.game.selected_vertices)
+            self.game.disambiguation_action = 'toggle' if ctrl_pressed else 'replace'
             # Prepare colored overlays for triangles that include any candidate vertex
             rows = verticesHolder.vertices.reshape(-1, 6)
             tri_count = len(rows) // 3
@@ -1431,18 +1434,21 @@ class EventHandler:
             self.game.disambiguation_item_rects = []
             self.game.disambiguation_ctrl_pressed = False
             self.game.disambiguation_triangles = []
+            prior = getattr(self.game, 'disambiguation_prev_selection', set())
+            action = getattr(self.game, 'disambiguation_action', None)
             # Keep highlights only for a short while? Clear now to avoid confusion
             self.game.yellow_highlights = set()
             if chosen_index is None:
                 self.game.set_status("Selection cancelled", 120)
                 return
-            # Apply as if user clicked this vertex
-            if self.game.disambiguation_ctrl_pressed:
+            # Restore prior selection and apply action
+            self.game.selected_vertices = set(prior)
+            if action == 'toggle':
                 if chosen_index in self.game.selected_vertices:
                     self.game.selected_vertices.remove(chosen_index)
                 else:
                     self.game.selected_vertices.add(chosen_index)
-            else:
+            else:  # replace
                 self.game.selected_vertices = {chosen_index}
             self.game.last_selected_vertex_index = chosen_index
             # Enter/refresh edit mode if single

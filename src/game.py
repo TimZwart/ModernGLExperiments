@@ -108,6 +108,8 @@ class Game:
         self.disambiguation_item_rects = []
         self.disambiguation_ctrl_pressed = False
         self.disambiguation_triangles = []  # list of {candidate:int, triangle_index:int, screen_pts:[(x,y)*3], color:(r,g,b,a)}
+        self.disambiguation_prev_selection = set()
+        self.disambiguation_action = None  # 'toggle' or 'replace'
 
         # Cleanup mode state
         self.cleanup_mode = False
