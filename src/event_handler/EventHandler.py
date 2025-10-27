@@ -81,14 +81,15 @@ class EventHandler:
                             self._end_disambiguation(idx)
                         continue
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    # Click on an option row
+                    # Click inside one of the highlighted triangles
                     x, y = event.pos
                     try:
-                        for i, rect in enumerate(getattr(self.game, 'disambiguation_item_rects', [])):
-                            if rect.collidepoint(x, y):
-                                if 0 <= i < len(self.game.disambiguation_candidates):
-                                    idx = self.game.disambiguation_candidates[i]
-                                    self._end_disambiguation(idx)
+                        tris = getattr(self.game, 'disambiguation_triangles', [])
+                        for ov in tris:
+                            pts = ov.get('screen_pts', [])
+                            if len(pts) == 3 and self._point_in_triangle((x, y), pts[0], pts[1], pts[2]):
+                                chosen_idx = int(ov.get('candidate'))
+                                self._end_disambiguation(chosen_idx)
                                 break
                     except Exception:
                         pass
@@ -1351,6 +1352,22 @@ class EventHandler:
             return nearest_index, candidates
         return nearest_index, []
 
+    def _pt_sub(self, a, b):
+        return (a[0] - b[0], a[1] - b[1])
+
+    def _cross(self, a, b):
+        return a[0]*b[1] - a[1]*b[0]
+
+    def _same_side(self, p1, p2, a, b):
+        ab = self._pt_sub(b, a)
+        cp1 = self._cross(ab, self._pt_sub(p1, a))
+        cp2 = self._cross(ab, self._pt_sub(p2, a))
+        return cp1 * cp2 >= 0
+
+    def _point_in_triangle(self, p, a, b, c):
+        # Barycentric/edge method in screen space
+        return self._same_side(p, a, b, c) and self._same_side(p, b, a, c) and self._same_side(p, c, a, b)
+
     def start_disambiguation(self, candidates:list, ctrl_pressed:bool):
         try:
             self.game.disambiguation_mode = True
@@ -1358,18 +1375,51 @@ class EventHandler:
             self.game.disambiguation_selected = 0
             self.game.disambiguation_item_rects = []
             self.game.disambiguation_ctrl_pressed = bool(ctrl_pressed)
-            # Highlight triangles that include these candidate vertices
+            # Prepare colored overlays for triangles that include any candidate vertex
             rows = verticesHolder.vertices.reshape(-1, 6)
             tri_count = len(rows) // 3
-            highlight_indices = set()
             candidate_set = set(candidates)
+            colors = [
+                (0, 0, 255, 110),   # blue
+                (255, 0, 0, 110),   # red
+                (0, 255, 0, 110),   # green
+                (255, 255, 0, 110), # yellow
+                (255, 0, 255, 110), # magenta
+                (0, 255, 255, 110), # cyan
+                (255, 128, 0, 110), # orange
+                (128, 0, 255, 110), # purple
+                (128, 128, 128, 110), # gray
+            ]
+            overlays = []
+            color_index = 0
+            # We group by triangle that contains any of the candidates
             for t in range(tri_count):
                 i0 = t * 3
-                tri_indices = {i0 + 0, i0 + 1, i0 + 2}
-                if tri_indices & candidate_set:
-                    highlight_indices.update(tri_indices)
+                tri_indices = [i0 + 0, i0 + 1, i0 + 2]
+                if any(idx in candidate_set for idx in tri_indices):
+                    # Project to screen
+                    pos = rows[tri_indices, :3]
+                    pts = self.game.renderer.renderer3D.world_to_screen(pos)
+                    # Skip triangles off-screen or with NaNs
+                    if np.isnan(pts).any():
+                        continue
+                    color = colors[color_index % len(colors)]
+                    color_index += 1
+                    overlays.append({
+                        'candidate': next((idx for idx in tri_indices if idx in candidate_set), tri_indices[0]),
+                        'triangle_index': t,
+                        'screen_pts': [(float(pts[0][0]), float(pts[0][1])), (float(pts[1][0]), float(pts[1][1])), (float(pts[2][0]), float(pts[2][1]))],
+                        'color': color,
+                    })
+            self.game.disambiguation_triangles = overlays
+            # Also set highlights as the union of these triangle vertex indices (thin boxes)
+            highlight_indices = set()
+            for ov in overlays:
+                ti = int(ov['triangle_index'])
+                j0 = ti * 3
+                highlight_indices.update([j0, j0+1, j0+2])
             self.game.yellow_highlights = highlight_indices
-            self.game.set_status("Multiple vertices here. Choose one (1-9, arrows+Enter, click)", 240)
+            self.game.set_status("Click a highlighted triangle to choose the vertex", 240)
         except Exception:
             # Fail safe: if something goes wrong, fall back to selecting the first
             if candidates:
@@ -1380,6 +1430,7 @@ class EventHandler:
             self.game.disambiguation_mode = False
             self.game.disambiguation_item_rects = []
             self.game.disambiguation_ctrl_pressed = False
+            self.game.disambiguation_triangles = []
             # Keep highlights only for a short while? Clear now to avoid confusion
             self.game.yellow_highlights = set()
             if chosen_index is None:

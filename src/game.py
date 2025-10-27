@@ -101,12 +101,13 @@ class Game:
         self.file_picker_max_visible = 12
         self.file_picker_item_rects = []
 
-		# Disambiguation (ambiguous vertex pick) modal state
+        # Disambiguation (ambiguous vertex pick) modal state
         self.disambiguation_mode = False
         self.disambiguation_candidates = []  # list[int] vertex indices
         self.disambiguation_selected = 0
         self.disambiguation_item_rects = []
         self.disambiguation_ctrl_pressed = False
+        self.disambiguation_triangles = []  # list of {candidate:int, triangle_index:int, screen_pts:[(x,y)*3], color:(r,g,b,a)}
 
         # Cleanup mode state
         self.cleanup_mode = False

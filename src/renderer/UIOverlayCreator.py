@@ -72,10 +72,8 @@ class UIOverlayCreator:
     def draw_ui_overlay(self):
         # Clear the overlay
         self.overlay.fill((0, 0, 0, 0))
-        # Disambiguation modal has top priority over other modals except file/color pickers already handled earlier
-        if getattr(self.game, 'disambiguation_mode', False):
-            self.draw_disambiguation_panel()
-            return
+        # During disambiguation, draw colored triangle overlays on top of normal UI
+        disambiguating = getattr(self.game, 'disambiguation_mode', False)
         # File picker modal overlay
         if getattr(self.game, 'file_picker_mode', False):
             # Dim background
@@ -493,6 +491,28 @@ class UIOverlayCreator:
             except Exception:
                 pass
 
+        # Draw disambiguation colored triangle overlays last (so they sit on top)
+        if disambiguating:
+            try:
+                # Dim entire screen slightly to focus on choice
+                dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+                dim.fill((0, 0, 0, 80))
+                self.overlay.blit(dim, (0, 0))
+                tris = getattr(self.game, 'disambiguation_triangles', [])
+                for ov in tris:
+                    pts = ov.get('screen_pts', [])
+                    color = ov.get('color', (255, 255, 0, 110))
+                    if len(pts) == 3:
+                        # Filled triangle
+                        pygame.draw.polygon(self.overlay, color, pts)
+                        # Outline for clarity
+                        pygame.draw.polygon(self.overlay, (255, 255, 255, 220), pts, 2)
+                hint = "Click a colored triangle to choose the vertex (Esc to cancel)"
+                hint_surf = self.font.render(hint, True, (255, 255, 255))
+                self.overlay.blit(hint_surf, (10, 10))
+            except Exception:
+                pass
+
     def draw_help_screen(self):
         font = pygame.font.Font(None, 24)
         rotate_key = keybindings.get('rotate', None)
@@ -658,61 +678,5 @@ class UIOverlayCreator:
             self.game.color_picker_rects.append((square_rect, color_name))
 
     def draw_disambiguation_panel(self):
-        try:
-            candidates = getattr(self.game, 'disambiguation_candidates', [])
-            selected_i = int(getattr(self.game, 'disambiguation_selected', 0))
-            # Build a panel listing the candidate vertex indices and their triangle context
-            rows = verticesHolder.vertices.reshape(-1, 6)
-            tri_count = len(rows) // 3
-            # Prepare strings
-            texts = []
-            for k, vi in enumerate(candidates):
-                # Find triangles that include this vertex index
-                tris = []
-                t_index = vi // 3
-                # In case vertices are reused across triangles (same pos), scan all tris and match by index set
-                for t in range(tri_count):
-                    i0 = t * 3
-                    if vi in (i0, i0 + 1, i0 + 2):
-                        tris.append(t)
-                pos = rows[vi, :3] if 0 <= vi < len(rows) else np.array([0, 0, 0])
-                label = f"{k+1}. Vertex {vi} at [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]  (tris: {tris})"
-                texts.append(label)
-
-            # Layout panel
-            line_h = 26
-            padding = 10
-            panel_w = min(self.width - 40, 800)
-            panel_h = min(self.height - 120, padding*2 + line_h * max(1, len(texts)) + 40)
-            panel_x = (self.width - panel_w) // 2
-            panel_y = (self.height - panel_h) // 2
-            panel_rect = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
-
-            # Dim background
-            dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-            dim.fill((0, 0, 0, 160))
-            self.overlay.blit(dim, (0, 0))
-
-            # Panel
-            pygame.draw.rect(self.overlay, (25, 25, 25), panel_rect)
-            pygame.draw.rect(self.overlay, (230, 230, 230), panel_rect, 2)
-            title = "Multiple vertices at click. Choose one: (1-9, arrows+Enter, click)"
-            title_surf = self.font.render(title, True, (255, 255, 255))
-            self.overlay.blit(title_surf, (panel_x + padding, panel_y + padding))
-
-            # Items
-            self.game.disambiguation_item_rects = []
-            start_y = panel_y + padding + 28
-            for i, text in enumerate(texts):
-                y = start_y + i * line_h
-                row_rect = pygame.Rect(panel_x + padding, y - 4, panel_w - padding*2, line_h)
-                sel = (i == selected_i)
-                bg = (60, 60, 60) if sel else (40, 40, 40)
-                pygame.draw.rect(self.overlay, bg, row_rect)
-                pygame.draw.rect(self.overlay, (100, 100, 100), row_rect, 1)
-                color = (255, 255, 0) if sel else (220, 220, 220)
-                txt_surf = self.font.render(text, True, color)
-                self.overlay.blit(txt_surf, (row_rect.left + 6, y))
-                self.game.disambiguation_item_rects.append(row_rect)
-        except Exception:
-            pass
+        # Deprecated: replaced by colored triangle overlays
+        return
