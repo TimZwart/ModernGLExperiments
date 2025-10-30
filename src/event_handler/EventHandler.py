@@ -81,16 +81,25 @@ class EventHandler:
                             self._end_disambiguation(idx)
                         continue
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    # Click inside one of the highlighted triangles
+                    # Click inside one of the highlighted triangles; pick the closest at the click point
                     x, y = event.pos
                     try:
                         tris = getattr(self.game, 'disambiguation_triangles', [])
+                        best = None
+                        best_depth = None
                         for ov in tris:
                             pts = ov.get('screen_pts', [])
-                            if len(pts) == 3 and self._point_in_triangle((x, y), pts[0], pts[1], pts[2]):
-                                chosen_idx = int(ov.get('candidate'))
-                                self._end_disambiguation(chosen_idx)
-                                break
+                            zvals = ov.get('ndc_z', [])
+                            if len(pts) == 3 and len(zvals) == 3 and self._point_in_triangle((x, y), pts[0], pts[1], pts[2]):
+                                w0, w1, w2 = self._barycentric_weights((x, y), pts[0], pts[1], pts[2])
+                                # Interpolate ndc z; smaller (more negative) is closer to camera in OpenGL
+                                depth = w0 * zvals[0] + w1 * zvals[1] + w2 * zvals[2]
+                                if (best_depth is None) or (depth < best_depth):
+                                    best_depth = depth
+                                    best = ov
+                        if best is not None:
+                            chosen_idx = int(best.get('candidate'))
+                            self._end_disambiguation(chosen_idx)
                     except Exception:
                         pass
                     continue
@@ -1368,6 +1377,16 @@ class EventHandler:
         # Barycentric/edge method in screen space
         return self._same_side(p, a, b, c) and self._same_side(p, b, a, c) and self._same_side(p, c, a, b)
 
+    def _barycentric_weights(self, p, a, b, c):
+        # Compute barycentric weights for point p in triangle (a,b,c) in 2D
+        denom = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        if abs(denom) < 1e-12:
+            return 1.0, 0.0, 0.0
+        w0 = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / denom
+        w1 = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / denom
+        w2 = 1.0 - w0 - w1
+        return w0, w1, w2
+
     def start_disambiguation(self, candidates:list, ctrl_pressed:bool):
         try:
             self.game.disambiguation_mode = True
@@ -1396,15 +1415,27 @@ class EventHandler:
             overlays = []
             color_index = 0
             # We group by triangle that contains any of the candidates
+            time = pygame.time.get_ticks() * 0.001
+            mvp = self.game.renderer.renderer3D.get_mvp_matrix(time)
+            width = self.game.renderer.renderer3D.width
+            height = self.game.renderer.renderer3D.height
             for t in range(tri_count):
                 i0 = t * 3
                 tri_indices = [i0 + 0, i0 + 1, i0 + 2]
                 if any(idx in candidate_set for idx in tri_indices):
                     # Project to screen
                     pos = rows[tri_indices, :3]
+                    # screen points (x,y)
                     pts = self.game.renderer.renderer3D.world_to_screen(pos)
+                    # compute ndc z for depth sorting at click
+                    ones = np.ones((pos.shape[0], 1), dtype=float)
+                    homo = np.concatenate([pos, ones], axis=1)
+                    clip = homo.dot(np.array(mvp))
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        ndc = clip[:, :3] / clip[:, 3:4]
+                    ndc_z = ndc[:, 2].astype(float)
                     # Skip triangles off-screen or with NaNs
-                    if np.isnan(pts).any():
+                    if np.isnan(pts).any() or np.isnan(ndc_z).any():
                         continue
                     color = colors[color_index % len(colors)]
                     color_index += 1
@@ -1412,6 +1443,7 @@ class EventHandler:
                         'candidate': next((idx for idx in tri_indices if idx in candidate_set), tri_indices[0]),
                         'triangle_index': t,
                         'screen_pts': [(float(pts[0][0]), float(pts[0][1])), (float(pts[1][0]), float(pts[1][1])), (float(pts[2][0]), float(pts[2][1]))],
+                        'ndc_z': [float(ndc_z[0]), float(ndc_z[1]), float(ndc_z[2])],
                         'color': color,
                     })
             self.game.disambiguation_triangles = overlays
