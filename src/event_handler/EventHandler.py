@@ -584,6 +584,10 @@ class EventHandler:
                         else:
                             self.game.edit_color_text = self.game.edit_color_text[:-1]
                         continue
+                    # Delete -> delete currently selected vertices even while editing
+                    if event.key == pygame.K_DELETE:
+                        self.delete_selected_vertices()
+                        continue
                     # Tab -> switch field
                     if event.key == pygame.K_TAB:
                         self.game.edit_focus = 'color' if self.game.edit_focus == 'pos' else 'pos'
