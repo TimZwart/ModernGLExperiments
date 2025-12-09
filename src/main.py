@@ -8,6 +8,7 @@ from src.renderer.Renderer import Renderer
 from src.geometry.loader import load_vertices
 from src.camera.Camera import Camera
 from src.configuration.session_store import get_last_file, set_last_file
+from src.configuration import loadconfig  # Ensure config is initialized and console verbosity applied
 if __name__ == '__main__':
     width, height = 800, 600
     pygame.init()

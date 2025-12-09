@@ -1,13 +1,23 @@
 import configparser
+import builtins
 config = None
 not_initialized = True
 
 def init():
-    print("init loadconfig")
     global config
     config = configparser.ConfigParser()
     if len (config.read('config.ini')) == 0:
         raise Exception("config.ini not found")
+    # Configure console verbosity
+    verbose = config['GAME'].getboolean('verbose_console', fallback=True)
+    if verbose:
+        print("init loadconfig")
+    else:
+        # Suppress standard print output when verbosity is disabled
+        try:
+            builtins.print = lambda *args, **kwargs: None
+        except Exception:
+            pass
 
 if not_initialized:
     init()
