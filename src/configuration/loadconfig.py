@@ -60,4 +60,7 @@ if 'cleanup_mode' not in keybindings:
 # Default key for removing fully covered triangles (cleanup mode only)
 if 'remove_covered' not in keybindings:
     keybindings['remove_covered'] = 'f4'
+# Default key to visualize triangles that use the same positions as selection (cleanup aid)
+if 'show_position_matches' not in keybindings:
+    keybindings['show_position_matches'] = 'f2'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

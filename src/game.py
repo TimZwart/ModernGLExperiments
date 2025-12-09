@@ -113,6 +113,8 @@ class Game:
 
         # Cleanup mode state
         self.cleanup_mode = False
+        # Overlays for cleanup inspection (triangles sharing selected positions)
+        self.cleanup_position_overlays = []
         
         # Predefined colors (RGB values 0.0-1.0)
         self.predefined_colors = {

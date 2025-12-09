@@ -42,6 +42,7 @@ class EventHandler:
             'check_edge': pygame.K_F11,
             'remove_internal_edges': pygame.K_F12,
             'remove_covered': pygame.K_F4,
+            'show_position_matches': pygame.K_F2,
             'color_picker': pygame.K_c,  # Color picker toggle
         }
         self.rotation_speed = 0.1
@@ -282,6 +283,9 @@ class EventHandler:
                         continue
                     if (('remove_covered' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_covered'])) or event.key == self.alternate_keys['remove_covered']:
                         self.covered_triangle_remover.remove_fully_covered_triangles(self.game)
+                        continue
+                    if (('show_position_matches' in keybindings) and event.key == pygame.key.key_code(keybindings['show_position_matches'])) or event.key == self.alternate_keys['show_position_matches']:
+                        self.show_triangles_matching_selected_positions()
                         continue
                 # Swallow all other events while in cleanup mode
                 continue
@@ -2153,6 +2157,8 @@ class EventHandler:
     def toggle_cleanup_mode(self):
         # Exit conflicting modes when entering cleanup
         self.game.cleanup_mode = not self.game.cleanup_mode
+        # Clear any cleanup inspection overlays whenever the mode toggles
+        self.game.cleanup_position_overlays = []
         if self.game.cleanup_mode:
             # Clear text edit modes and rotation states
             self.game.add_vertex_mode = False
@@ -2171,6 +2177,81 @@ class EventHandler:
             self.game.set_status("Cleanup Mode ON", 120)
         else:
             self.game.set_status("Cleanup Mode OFF", 120)
+
+    def show_triangles_matching_selected_positions(self):
+        """
+        Cleanup helper: overlay every triangle whose three vertex positions match any of the
+        currently selected vertex positions (by coordinate, ignoring color and index).
+        """
+        try:
+            rows = verticesHolder.vertices.reshape(-1, 6)
+        except Exception:
+            self.game.cleanup_position_overlays = []
+            self.game.set_status("No vertices available", 180)
+            return
+
+        selected_indices = [i for i in self.game.selected_vertices if 0 <= i < len(rows)]
+        self.game.cleanup_position_overlays = []
+
+        if not selected_indices:
+            self.game.set_status("Select at least one vertex to inspect", 180)
+            return
+
+        pos = rows[:, :3]
+        num_tri = len(rows) // 3
+        if num_tri == 0:
+            self.game.set_status("No triangles to inspect", 180)
+            return
+
+        def pos_key(p):
+            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
+
+        selected_keys = {pos_key(pos[i]) for i in selected_indices}
+        overlays = []
+        colors = [
+            (255, 0, 0, 120),     # red
+            (0, 255, 0, 120),     # green
+            (0, 0, 255, 120),     # blue
+            (255, 255, 0, 120),   # yellow
+            (255, 0, 255, 120),   # magenta
+            (0, 255, 255, 120),   # cyan
+            (255, 128, 0, 120),   # orange
+            (128, 0, 255, 120),   # purple
+            (128, 128, 128, 120), # gray
+        ]
+
+        color_index = 0
+        for t in range(num_tri):
+            i0 = t * 3
+            tri_indices = [i0 + 0, i0 + 1, i0 + 2]
+            if any(idx >= len(pos) for idx in tri_indices):
+                continue
+            tri_pos = pos[tri_indices]
+            if not all(pos_key(p) in selected_keys for p in tri_pos):
+                continue
+            screen_pts = self.game.renderer.renderer3D.world_to_screen(tri_pos)
+            if np.isnan(screen_pts).any():
+                continue
+            color = colors[color_index % len(colors)]
+            color_index += 1
+            label_lines = [
+                f"p0 [{tri_pos[0][0]:.4f}, {tri_pos[0][1]:.4f}, {tri_pos[0][2]:.4f}]",
+                f"p1 [{tri_pos[1][0]:.4f}, {tri_pos[1][1]:.4f}, {tri_pos[1][2]:.4f}]",
+                f"p2 [{tri_pos[2][0]:.4f}, {tri_pos[2][1]:.4f}, {tri_pos[2][2]:.4f}]",
+            ]
+            centroid = np.mean(screen_pts, axis=0)
+            overlays.append({
+                'triangle_index': t,
+                'screen_pts': [(float(screen_pts[0][0]), float(screen_pts[0][1])),
+                               (float(screen_pts[1][0]), float(screen_pts[1][1])),
+                               (float(screen_pts[2][0]), float(screen_pts[2][1]))],
+                'color': color,
+                'labels': label_lines,
+                'label_pos': (float(centroid[0]), float(centroid[1])),
+            })
+
+        self.game.cleanup_position_overlays = overlays
+        self.game.set_status(f"Found {len(overlays)} triangle(s) using selected positions", 240)
 
     def check_selected_edge_exists(self):
         rows = verticesHolder.vertices.reshape(-1, 6)

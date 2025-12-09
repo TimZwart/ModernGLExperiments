@@ -491,6 +491,28 @@ class UIOverlayCreator:
             except Exception:
                 pass
 
+        # Cleanup inspector: draw triangles whose vertices share positions with the current selection
+        if getattr(self.game, 'cleanup_mode', False) and getattr(self.game, 'cleanup_position_overlays', []):
+            try:
+                overlays = self.game.cleanup_position_overlays
+                for ov in overlays:
+                    pts = ov.get('screen_pts', [])
+                    color = ov.get('color', (255, 0, 0, 120))
+                    if len(pts) == 3:
+                        # Filled triangle
+                        pygame.draw.polygon(self.overlay, color, pts)
+                        # Outline for clarity
+                        outline = (color[0], color[1], color[2], 220)
+                        pygame.draw.polygon(self.overlay, outline, pts, 2)
+                        # Coordinates label near centroid
+                        label_pos = ov.get('label_pos', (pts[0][0], pts[0][1]))
+                        labels = ov.get('labels', [])
+                        for idx, line in enumerate(labels):
+                            text_surface = self.font.render(line, True, (color[0], color[1], color[2]))
+                            self.overlay.blit(text_surface, (label_pos[0] + 6, label_pos[1] + 6 + idx * 18))
+            except Exception:
+                pass
+
         # Draw disambiguation colored triangle overlays last (so they sit on top)
         if disambiguating:
             try:
@@ -596,6 +618,7 @@ class UIOverlayCreator:
             "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
             f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
             f"Remove Triangles Covered by Others: {keybindings.get('remove_covered', 'f4').upper()} or F4",
+            f"Show Triangles Using Selected Positions: {keybindings.get('show_position_matches', 'f2').upper()} or F2",
             f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             f"Help: {keybindings['help'].upper()} or F1 to close",
         ]
