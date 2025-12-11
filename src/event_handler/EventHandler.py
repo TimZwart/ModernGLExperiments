@@ -2159,6 +2159,7 @@ class EventHandler:
         self.game.cleanup_mode = not self.game.cleanup_mode
         # Clear any cleanup inspection overlays whenever the mode toggles
         self.game.cleanup_position_overlays = []
+        self.game.cleanup_position_wireframes = []
         if self.game.cleanup_mode:
             # Clear text edit modes and rotation states
             self.game.add_vertex_mode = False
@@ -2192,6 +2193,7 @@ class EventHandler:
 
         selected_indices = [i for i in self.game.selected_vertices if 0 <= i < len(rows)]
         self.game.cleanup_position_overlays = []
+        self.game.cleanup_position_wireframes = []
 
         if not selected_indices:
             self.game.set_status("Select at least one vertex to inspect", 180)
@@ -2208,6 +2210,7 @@ class EventHandler:
 
         selected_keys = {pos_key(pos[i]) for i in selected_indices}
         overlays = []
+        wireframes = []
         colors = [
             (255, 0, 0, 120),     # red
             (0, 255, 0, 120),     # green
@@ -2221,6 +2224,7 @@ class EventHandler:
         ]
 
         color_index = 0
+        overlay_tri_indices = set()
         for t in range(num_tri):
             i0 = t * 3
             tri_indices = [i0 + 0, i0 + 1, i0 + 2]
@@ -2234,6 +2238,7 @@ class EventHandler:
                 continue
             color = colors[color_index % len(colors)]
             color_index += 1
+            overlay_tri_indices.add(t)
             label_lines = [
                 f"p0 [{tri_pos[0][0]:.4f}, {tri_pos[0][1]:.4f}, {tri_pos[0][2]:.4f}]",
                 f"p1 [{tri_pos[1][0]:.4f}, {tri_pos[1][1]:.4f}, {tri_pos[1][2]:.4f}]",
@@ -2250,7 +2255,26 @@ class EventHandler:
                 'label_pos': (float(centroid[0]), float(centroid[1])),
             })
 
+        # Build wireframe overlays for non-matching triangles (to avoid global wireframe)
+        for t in range(num_tri):
+            if t in overlay_tri_indices:
+                continue
+            i0 = t * 3
+            tri_indices = [i0 + 0, i0 + 1, i0 + 2]
+            if any(idx >= len(pos) for idx in tri_indices):
+                continue
+            tri_pos = pos[tri_indices]
+            screen_pts = self.game.renderer.renderer3D.world_to_screen(tri_pos)
+            if np.isnan(screen_pts).any():
+                continue
+            wireframes.append([
+                (float(screen_pts[0][0]), float(screen_pts[0][1])),
+                (float(screen_pts[1][0]), float(screen_pts[1][1])),
+                (float(screen_pts[2][0]), float(screen_pts[2][1])),
+            ])
+
         self.game.cleanup_position_overlays = overlays
+        self.game.cleanup_position_wireframes = wireframes
         self.game.set_status(f"Found {len(overlays)} triangle(s) using selected positions", 240)
 
     def check_selected_edge_exists(self):

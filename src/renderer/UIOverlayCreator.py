@@ -495,6 +495,12 @@ class UIOverlayCreator:
         if getattr(self.game, 'cleanup_mode', False) and getattr(self.game, 'cleanup_position_overlays', []):
             try:
                 overlays = self.game.cleanup_position_overlays
+                wireframes = getattr(self.game, 'cleanup_position_wireframes', [])
+                # Draw wireframes for non-matching triangles first
+                if wireframes:
+                    for wf in wireframes:
+                        if len(wf) == 3:
+                            pygame.draw.polygon(self.overlay, (200, 200, 200, 180), wf, 1)
                 for ov in overlays:
                     pts = ov.get('screen_pts', [])
                     color = ov.get('color', (255, 0, 0, 120))
