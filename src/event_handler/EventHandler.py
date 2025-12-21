@@ -8,6 +8,16 @@ import numpy as np
 import itertools
 from src.configuration.loadconfig import keybindings, mouse_rotation_button
 from src.event_handler.CoveredTriangleRemover import CoveredTriangleRemover
+from src.event_handler.InternalEdgeRemover import InternalEdgeRemover
+from src.event_handler.BackfaceTriangleFixer import BackfaceTriangleFixer
+from src.event_handler.EdgeExistenceChecker import EdgeExistenceChecker
+from src.event_handler.PositionMatchInspector import PositionMatchInspector
+from src.event_handler.SelectionController import SelectionController
+from src.event_handler.VertexEditController import VertexEditController
+from src.event_handler.ShapesController import ShapesController
+from src.event_handler.FileController import FileController
+from src.event_handler.ExtrudeController import ExtrudeController
+from src.event_handler.CleanupModeController import CleanupModeController
 import ast
 import os
 
@@ -19,6 +29,16 @@ class EventHandler:
         self.rotate_key_held = False
         self.triangle_filler = TriangleFiller(game)
         self.covered_triangle_remover = CoveredTriangleRemover()
+        self.internal_edge_remover = InternalEdgeRemover()
+        self.backface_triangle_fixer = BackfaceTriangleFixer()
+        self.edge_existence_checker = EdgeExistenceChecker()
+        self.position_match_inspector = PositionMatchInspector()
+        self.vertex_editor = VertexEditController(game)
+        self.selection_controller = SelectionController(game, vertex_editor=self.vertex_editor)
+        self.shapes_controller = ShapesController(game, clear_rotation_state=self._clear_rotation_state)
+        self.file_controller = FileController(game)
+        self.extrude_controller = ExtrudeController(game, triangle_filler=self.triangle_filler, remove_internal_edges_callable=self.remove_internal_edges_via_raycasts)
+        self.cleanup_mode_controller = CleanupModeController(game, clear_rotation_state=self._clear_rotation_state, cancel_shape_flow=self.cancel_shape_flow)
         self.alternate_keys = {
             'forward': pygame.K_UP,
             'backward': pygame.K_DOWN,
@@ -46,6 +66,10 @@ class EventHandler:
             'color_picker': pygame.K_c,  # Color picker toggle
         }
         self.rotation_speed = 0.1
+
+    def _clear_rotation_state(self):
+        self.mouse_button_rotation_held = False
+        self.rotate_key_held = False
 
     def handle_events(self):
         continue_running = True
@@ -829,274 +853,41 @@ class EventHandler:
         return continue_running 
 
     def _get_add_vertex_default_text(self):
-        try:
-            idx = getattr(self.game, 'last_selected_vertex_index', None)
-            if idx is not None:
-                coords = verticesHolder.vertices[idx*6:idx*6+3]
-                if len(coords) == 3:
-                    x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
-                    return f"[{x}, {y}, {z}]"
-            if len(self.game.selected_vertices) == 1:
-                selected = next(iter(self.game.selected_vertices))
-                coords = verticesHolder.vertices[selected*6:selected*6+3]
-                if len(coords) == 3:
-                    x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
-                    return f"[{x}, {y}, {z}]"
-        except Exception:
-            pass
-        return "[0.0, 0.0, 0.0]"
+        return self.vertex_editor.get_add_vertex_default_text()
 
     def _fmt_triplet(self, values) -> str:
-        try:
-            x, y, z = float(values[0]), float(values[1]), float(values[2])
-            return f"[{x:.3f}, {y:.3f}, {z:.3f}]"
-        except Exception:
-            try:
-                return f"[{values[0]}, {values[1]}, {values[2]}]"
-            except Exception:
-                return "[0.000, 0.000, 0.000]"
+        return self.vertex_editor.fmt_triplet(values)
 
     def _get_add_vertex_default_texts(self):
-        # Position
-        try:
-            idx = getattr(self.game, 'last_selected_vertex_index', None)
-            if idx is not None:
-                rows = verticesHolder.vertices.reshape(-1, 6)
-                if 0 <= idx < len(rows):
-                    pos = rows[idx, :3].astype(float)
-                    pos_str = self._fmt_triplet(pos)
-                else:
-                    pos_str = "[0.000, 0.000, 0.000]"
-            elif len(self.game.selected_vertices) == 1:
-                selected = next(iter(self.game.selected_vertices))
-                rows = verticesHolder.vertices.reshape(-1, 6)
-                if 0 <= selected < len(rows):
-                    pos = rows[selected, :3].astype(float)
-                    pos_str = self._fmt_triplet(pos)
-                else:
-                    pos_str = "[0.000, 0.000, 0.000]"
-            else:
-                pos_str = "[0.000, 0.000, 0.000]"
-        except Exception:
-            pos_str = "[0.000, 0.000, 0.000]"
-        # Color from current_color
-        try:
-            col = getattr(self.game, 'current_color', [0.0, 0.0, 0.0])
-            col_str = self._fmt_triplet(col)
-        except Exception:
-            col_str = "[1.000, 1.000, 1.000]"
-        return pos_str, col_str
+        return self.vertex_editor.get_add_vertex_default_texts()
 
     def _prefill_edit_fields(self, selected_index:int):
-        try:
-            rows = verticesHolder.vertices.reshape(-1, 6)
-            if 0 <= selected_index < len(rows):
-                pos = rows[selected_index, :3].astype(float)
-                col = rows[selected_index, 3:6].astype(float)
-                self.game.edit_pos_text = self._fmt_triplet(pos)
-                self.game.edit_color_text = self._fmt_triplet(col)
-                # For backward-compat displayed string (if used anywhere)
-                self.game.edit_text = f"{self.game.edit_pos_text} {self.game.edit_color_text}"
-                self.game.edit_focus = 'pos'
-            else:
-                self.game.edit_pos_text = "[0.000, 0.000, 0.000]"
-                self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
-        except Exception:
-            self.game.edit_pos_text = "[0.000, 0.000, 0.000]"
-            self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
+        return self.vertex_editor.prefill_edit_fields(selected_index)
 
     def _get_default_shape_point_text(self):
-        # If there are no vertices, default to origin
-        try:
-            total = len(verticesHolder.vertices) // 6
-            if total == 0:
-                return "[0.0, 0.0, 0.0]"
-            # Prefer last selected vertex if available
-            idx = getattr(self.game, 'last_selected_vertex_index', None)
-            if idx is not None and 0 <= idx < total:
-                coords = verticesHolder.vertices[idx*6:idx*6+3]
-                if len(coords) == 3:
-                    x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
-                    return f"[{x}, {y}, {z}]"
-            # Otherwise use the last vertex in the list
-            coords = verticesHolder.vertices[(total-1)*6:(total-1)*6+3]
-            if len(coords) == 3:
-                x, y, z = float(coords[0]), float(coords[1]), float(coords[2])
-                return f"[{x}, {y}, {z}]"
-        except Exception:
-            pass
-        return "[0.0, 0.0, 0.0]"
+        return self.shapes_controller.get_default_shape_point_text()
 
     # ===================== Shapes Mode / Input Flow =====================
     def toggle_shapes_mode(self):
-        # Exit any existing shape input flow when toggling
-        self.game.shapes_mode = not self.game.shapes_mode
-        if not self.game.shapes_mode:
-            self.cancel_shape_flow(clear_error=True)
-            self.game.set_status("Shapes Mode OFF", 120)
-        else:
-            self.cancel_shape_flow(clear_error=True)
-            # Ensure rotation states are cleared when entering shapes mode
-            self.mouse_button_rotation_held = False
-            self.rotate_key_held = False
-            self.game.set_status("Shapes Mode ON", 120)
+        return self.shapes_controller.toggle_shapes_mode()
 
     def cancel_shape_flow(self, clear_error:bool=False):
-        self.game.shape_input_mode = None
-        self.game.shape_step = None
-        self.game.shape_primary_text = ""
-        self.game.shape_secondary_text = ""
-        # Clear any temporary state for shapes
-        for attr in ("_shape_tmp_point", "_shape_tmp_width", "_shape_tmp_length", "_shape_tmp_sides",
-                     "_shape_tmp_dim", "_shape_tmp_direction_point", "_shape_two_vertices_mode",
-                     "_shape_edge_p0", "_shape_edge_p1"):
-            if hasattr(self, attr):
-                try:
-                    delattr(self, attr)
-                except Exception:
-                    pass
-        # Clear shape-specific highlights
-        try:
-            self.game.yellow_highlights.clear()
-        except Exception:
-            pass
-        if clear_error:
-            self.game.shape_error = ""
+        return self.shapes_controller.cancel_shape_flow(clear_error=clear_error)
 
     def start_rectangle_flow(self):
-        self.game.shape_input_mode = 'rectangle'
-        self.game.shape_primary_text = ""
-        self.game.shape_secondary_text = ""
-        # Prevent accidental rotation while starting shape flow
-        self.mouse_button_rotation_held = False
-        self.rotate_key_held = False
-        vertices = verticesHolder.vertices.reshape(-1, 6)
-        if len(self.game.selected_vertices) == 2 and len(vertices) > 0:
-            # Two-vertex rectangle mode
-            i_a, i_b = sorted(list(self.game.selected_vertices))
-            if 0 <= i_a < len(vertices) and 0 <= i_b < len(vertices):
-                p0 = vertices[i_a, :3].astype(float)
-                p1 = vertices[i_b, :3].astype(float)
-                self._shape_edge_p0 = p0
-                self._shape_edge_p1 = p1
-                self._shape_two_vertices_mode = True
-                self.game.shape_step = 'dimension'
-                # Highlight base vertex (first of the two) and show its coordinates in the prompt for context
-                self._shape_base_index = i_a
-                self.game.yellow_highlights = {i_a}
-                bx, by, bz = float(p0[0]), float(p0[1]), float(p0[2])
-                self.game.shape_error = f"Enter other dimension (number). Base: [{bx:.3f}, {by:.3f}, {bz:.3f}]"
-                return
-        # Default single-point rectangle mode
-        self._shape_two_vertices_mode = False
-        self.game.shape_step = 'point'
-        # Prefill default point
-        self.game.shape_primary_text = self._get_default_shape_point_text()
-        self.game.shape_error = "Enter start point [x, y, z]"
+        return self.shapes_controller.start_rectangle_flow()
 
     def start_ngon_flow(self):
-        self.game.shape_input_mode = 'ngon'
-        self.game.shape_step = 'point'
-        self.game.shape_primary_text = ""
-        self.game.shape_secondary_text = ""
-        # Prevent accidental rotation while starting shape flow
-        self.mouse_button_rotation_held = False
-        self.rotate_key_held = False
-        # Prefill default point
-        self.game.shape_primary_text = self._get_default_shape_point_text()
-        self.game.shape_error = "Enter center/start point [x, y, z]"
+        return self.shapes_controller.start_ngon_flow()
 
     def backspace_shape_text(self):
-        if self.game.shape_step in ('point', 'width', 'sides', 'dimension', 'direction'):
-            self.game.shape_primary_text = self.game.shape_primary_text[:-1]
-        elif self.game.shape_step == 'length':
-            self.game.shape_secondary_text = self.game.shape_secondary_text[:-1]
-        self.game.shape_error = ""
+        return self.shapes_controller.backspace_shape_text()
 
     def append_shape_text(self, ch:str):
-        if not ch:
-            return
-        if self.game.shape_step in ('point', 'width', 'sides', 'dimension', 'direction'):
-            self.game.shape_primary_text += ch
-        elif self.game.shape_step == 'length':
-            self.game.shape_secondary_text += ch
-        self.game.shape_error = ""
+        return self.shapes_controller.append_shape_text(ch)
 
     def apply_shape_step(self):
-        mode = self.game.shape_input_mode
-        step = self.game.shape_step
-        if mode is None or step is None:
-            return
-        try:
-            if step == 'point':
-                # Expect [x, y, z]
-                point = ast.literal_eval((self.game.shape_primary_text or '').strip())
-                if not (isinstance(point, (list, tuple)) and len(point) == 3):
-                    raise ValueError("Enter [x, y, z]")
-                px, py, pz = float(point[0]), float(point[1]), float(point[2])
-                self._shape_tmp_point = (px, py, pz)
-                if mode == 'rectangle':
-                    self.game.shape_step = 'width'
-                    self.game.shape_primary_text = ""
-                    self.game.shape_error = "Enter width (number)"
-                elif mode == 'ngon':
-                    self.game.shape_step = 'sides'
-                    self.game.shape_primary_text = ""
-                    self.game.shape_error = "Enter number of sides (>=3)"
-                return
-            if mode == 'rectangle':
-                # Two-vertex flow: dimension -> direction
-                if getattr(self, '_shape_two_vertices_mode', False):
-                    if step == 'dimension':
-                        dim = self._parse_number(self.game.shape_primary_text)
-                        if not np.isfinite(dim) or dim <= 0:
-                            raise ValueError("Dimension must be > 0")
-                        self._shape_tmp_dim = dim
-                        self.game.shape_step = 'direction'
-                        self.game.shape_primary_text = ""
-                        # Keep highlighting base vertex and include its coords in prompt
-                        try:
-                            bx, by, bz = float(self._shape_edge_p0[0]), float(self._shape_edge_p0[1]), float(self._shape_edge_p0[2])
-                            self.game.shape_error = f"Enter direction point [x, y, z]. Base: [{bx:.3f}, {by:.3f}, {bz:.3f}]"
-                            self.game.yellow_highlights = {getattr(self, '_shape_base_index', None)} if hasattr(self, '_shape_base_index') else self.game.yellow_highlights
-                        except Exception:
-                            self.game.shape_error = "Enter direction point [x, y, z]"
-                        return
-                    if step == 'direction':
-                        point = ast.literal_eval((self.game.shape_primary_text or '').strip())
-                        if not (isinstance(point, (list, tuple)) and len(point) == 3):
-                            raise ValueError("Enter [x, y, z]")
-                        pdx, pdy, pdz = float(point[0]), float(point[1]), float(point[2])
-                        self._shape_tmp_direction_point = np.array([pdx, pdy, pdz], dtype=float)
-                        self._commit_rectangle_from_two_vertices()
-                        return
-                # Single-point flow: width -> length
-                if step == 'width':
-                    width = self._parse_number(self.game.shape_primary_text)
-                    if not np.isfinite(width) or width <= 0:
-                        raise ValueError("Width must be > 0")
-                    self._shape_tmp_width = width
-                    self.game.shape_step = 'length'
-                    self.game.shape_secondary_text = ""
-                    self.game.shape_error = "Enter length (number)"
-                    return
-                if step == 'length':
-                    length = self._parse_number(self.game.shape_secondary_text)
-                    if not np.isfinite(length) or length <= 0:
-                        raise ValueError("Length must be > 0")
-                    self._shape_tmp_length = length
-                    self._commit_rectangle()
-                    return
-            if mode == 'ngon':
-                if step == 'sides':
-                    sides_val = int(ast.literal_eval((self.game.shape_primary_text or '0').strip()))
-                    if sides_val < 3:
-                        raise ValueError("Sides must be >= 3")
-                    self._shape_tmp_sides = sides_val
-                    self._commit_ngon()
-                    return
-        except Exception as e:
-            self.game.shape_error = f"{e}"
+        return self.shapes_controller.apply_shape_step()
 
     def _commit_rectangle(self):
         # Snapshot before mutating geometry
@@ -1312,1214 +1103,90 @@ class EventHandler:
             self.game.renderer.renderer3D.update_vertex_buffer()
 
     def find_nearest_vertex(self, x, y):
-        if verticesHolder.vertices.size == 0:
-            return None
-        vertices = verticesHolder.vertices.reshape(-1, 6)
-        screen_coords = self.game.renderer.renderer3D.world_to_screen(vertices[:, :3])
-        
-        print(f"Total vertices: {len(vertices)}")
-        print(f"Screen coordinates shape: {screen_coords.shape}")
-        
-        # Calculate distances for all vertices
-        distances = np.sqrt(np.sum((screen_coords - np.array([x, y])) ** 2, axis=1))
-        
-        # Find the index of the nearest vertex
-        nearest_index = np.argmin(distances)
-        nearest_distance = distances[nearest_index]
-        
-        # Set a maximum distance threshold (e.g., 500 pixels)
-        max_distance = 500
-        
-        print(f"Click position: ({x}, {y})")
-        print("Vertex positions:")
-        for i, (sx, sy) in enumerate(screen_coords):
-            print(f"Vertex {i}: ({sx:.2f}, {sy:.2f}), distance: {distances[i]:.2f}")
-        
-        print(f"Nearest vertex screen position: ({screen_coords[nearest_index][0]:.2f}, {screen_coords[nearest_index][1]:.2f})")
-        print(f"Distance to nearest vertex: {nearest_distance:.2f}")
-        
-        if nearest_distance > max_distance:
-            print(f"No vertex within {max_distance} pixels")
-            return None
-        
-        print(f"Selected vertex index: {nearest_index}")
-        
-        return nearest_index
+        return self.selection_controller.find_nearest_vertex(x, y)
 
     def find_nearest_vertex_with_ambiguity(self, x, y):
-        if verticesHolder.vertices.size == 0:
-            return None, []
-        vertices = verticesHolder.vertices.reshape(-1, 6)
-        screen_coords = self.game.renderer.renderer3D.world_to_screen(vertices[:, :3])
-        distances = np.sqrt(np.sum((screen_coords - np.array([x, y])) ** 2, axis=1))
-        nearest_index = int(np.argmin(distances))
-        nearest_distance = float(distances[nearest_index])
-        max_distance = 500
-        if nearest_distance > max_distance:
-            return None, []
-        # Determine ambiguous: all vertices whose world positions equal the nearest one (within tolerance)
-        tol = 1e-6
-        target_pos = vertices[nearest_index, :3]
-        diffs = np.abs(vertices[:, :3] - target_pos)
-        same_mask = (diffs[:, 0] <= tol) & (diffs[:, 1] <= tol) & (diffs[:, 2] <= tol)
-        candidates = np.where(same_mask)[0].tolist()
-        # Sort candidates by distance so the top is the closest in screen-space
-        candidates.sort(key=lambda i: distances[i])
-        if len(candidates) > 1:
-            return nearest_index, candidates
-        return nearest_index, []
+        return self.selection_controller.find_nearest_vertex_with_ambiguity(x, y)
 
     def _pt_sub(self, a, b):
-        return (a[0] - b[0], a[1] - b[1])
+        return self.selection_controller._pt_sub(a, b)
 
     def _cross(self, a, b):
-        return a[0]*b[1] - a[1]*b[0]
+        return self.selection_controller._cross(a, b)
 
     def _same_side(self, p1, p2, a, b):
-        ab = self._pt_sub(b, a)
-        cp1 = self._cross(ab, self._pt_sub(p1, a))
-        cp2 = self._cross(ab, self._pt_sub(p2, a))
-        return cp1 * cp2 >= 0
+        return self.selection_controller._same_side(p1, p2, a, b)
 
     def _point_in_triangle(self, p, a, b, c):
-        # Barycentric/edge method in screen space
-        return self._same_side(p, a, b, c) and self._same_side(p, b, a, c) and self._same_side(p, c, a, b)
+        return self.selection_controller.point_in_triangle(p, a, b, c)
 
     def _barycentric_weights(self, p, a, b, c):
-        # Compute barycentric weights for point p in triangle (a,b,c) in 2D
-        denom = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
-        if abs(denom) < 1e-12:
-            return 1.0, 0.0, 0.0
-        w0 = ((b[1] - c[1]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[1] - c[1])) / denom
-        w1 = ((c[1] - a[1]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[1] - c[1])) / denom
-        w2 = 1.0 - w0 - w1
-        return w0, w1, w2
+        return self.selection_controller.barycentric_weights(p, a, b, c)
 
     def start_disambiguation(self, candidates:list, ctrl_pressed:bool):
-        try:
-            self.game.disambiguation_mode = True
-            self.game.disambiguation_candidates = list(candidates)
-            self.game.disambiguation_selected = 0
-            self.game.disambiguation_item_rects = []
-            self.game.disambiguation_ctrl_pressed = bool(ctrl_pressed)
-            # Snapshot prior selection and intended action
-            self.game.disambiguation_prev_selection = set(self.game.selected_vertices)
-            self.game.disambiguation_action = 'toggle' if ctrl_pressed else 'replace'
-            # Prepare colored overlays for triangles that include any candidate vertex
-            rows = verticesHolder.vertices.reshape(-1, 6)
-            tri_count = len(rows) // 3
-            candidate_set = set(candidates)
-            colors = [
-                (0, 0, 255, 110),   # blue
-                (255, 0, 0, 110),   # red
-                (0, 255, 0, 110),   # green
-                (255, 255, 0, 110), # yellow
-                (255, 0, 255, 110), # magenta
-                (0, 255, 255, 110), # cyan
-                (255, 128, 0, 110), # orange
-                (128, 0, 255, 110), # purple
-                (128, 128, 128, 110), # gray
-            ]
-            overlays = []
-            color_index = 0
-            # We group by triangle that contains any of the candidates
-            time = pygame.time.get_ticks() * 0.001
-            mvp = self.game.renderer.renderer3D.get_mvp_matrix(time)
-            width = self.game.renderer.renderer3D.width
-            height = self.game.renderer.renderer3D.height
-            for t in range(tri_count):
-                i0 = t * 3
-                tri_indices = [i0 + 0, i0 + 1, i0 + 2]
-                if any(idx in candidate_set for idx in tri_indices):
-                    # Project to screen
-                    pos = rows[tri_indices, :3]
-                    # screen points (x,y)
-                    pts = self.game.renderer.renderer3D.world_to_screen(pos)
-                    # compute ndc z for depth sorting at click
-                    ones = np.ones((pos.shape[0], 1), dtype=float)
-                    homo = np.concatenate([pos, ones], axis=1)
-                    clip = homo.dot(np.array(mvp))
-                    with np.errstate(divide='ignore', invalid='ignore'):
-                        ndc = clip[:, :3] / clip[:, 3:4]
-                    ndc_z = ndc[:, 2].astype(float)
-                    # Skip triangles off-screen or with NaNs
-                    if np.isnan(pts).any() or np.isnan(ndc_z).any():
-                        continue
-                    color = colors[color_index % len(colors)]
-                    color_index += 1
-                    overlays.append({
-                        'candidate': next((idx for idx in tri_indices if idx in candidate_set), tri_indices[0]),
-                        'triangle_index': t,
-                        'screen_pts': [(float(pts[0][0]), float(pts[0][1])), (float(pts[1][0]), float(pts[1][1])), (float(pts[2][0]), float(pts[2][1]))],
-                        'ndc_z': [float(ndc_z[0]), float(ndc_z[1]), float(ndc_z[2])],
-                        'color': color,
-                    })
-            self.game.disambiguation_triangles = overlays
-            # Also set highlights as the union of these triangle vertex indices (thin boxes)
-            highlight_indices = set()
-            for ov in overlays:
-                ti = int(ov['triangle_index'])
-                j0 = ti * 3
-                highlight_indices.update([j0, j0+1, j0+2])
-            self.game.yellow_highlights = highlight_indices
-            self.game.set_status("Click a highlighted triangle to choose the vertex", 240)
-        except Exception:
-            # Fail safe: if something goes wrong, fall back to selecting the first
-            if candidates:
-                self._end_disambiguation(candidates[0])
+        return self.selection_controller.start_disambiguation(candidates, ctrl_pressed)
 
     def _end_disambiguation(self, chosen_index:int|None):
-        try:
-            self.game.disambiguation_mode = False
-            self.game.disambiguation_item_rects = []
-            self.game.disambiguation_ctrl_pressed = False
-            self.game.disambiguation_triangles = []
-            prior = getattr(self.game, 'disambiguation_prev_selection', set())
-            action = getattr(self.game, 'disambiguation_action', None)
-            # Keep highlights only for a short while? Clear now to avoid confusion
-            self.game.yellow_highlights = set()
-            if chosen_index is None:
-                self.game.set_status("Selection cancelled", 120)
-                return
-            # Restore prior selection and apply action
-            self.game.selected_vertices = set(prior)
-            if action == 'toggle':
-                if chosen_index in self.game.selected_vertices:
-                    self.game.selected_vertices.remove(chosen_index)
-                else:
-                    self.game.selected_vertices.add(chosen_index)
-            else:  # replace
-                self.game.selected_vertices = {chosen_index}
-            self.game.last_selected_vertex_index = chosen_index
-            # Enter/refresh edit mode if single
-            if len(self.game.selected_vertices) == 1:
-                self.game.edit_mode = True
-                self._prefill_edit_fields(chosen_index)
-        except Exception:
-            pass
+        return self.selection_controller.end_disambiguation(chosen_index)
 
     def apply_edit(self):
-        selected_count = len(self.game.selected_vertices)
-        if selected_count == 0:
-            self.game.edit_mode = False
-            return
-        try:
-            rows = verticesHolder.vertices.reshape(-1, 6)
-            if selected_count == 1:
-                selected = list(self.game.selected_vertices)[0]
-                if not (0 <= selected < len(rows)):
-                    print("Selected index out of bounds")
-                    self.game.edit_mode = False
-                    return
-                # Parse position
-                pos_text = (self.game.edit_pos_text or "").strip()
-                if pos_text:
-                    pos_list = ast.literal_eval(pos_text)
-                    if not (isinstance(pos_list, (list, tuple)) and len(pos_list) == 3):
-                        raise ValueError("Enter [x, y, z] for position")
-                    px, py, pz = float(pos_list[0]), float(pos_list[1]), float(pos_list[2])
-                else:
-                    px, py, pz = rows[selected, :3].astype(float)
-                # Parse color (optional)
-                color_text = (self.game.edit_color_text or "").strip()
-                print(f"Processing color text: '{color_text}'")
-                if color_text:
-                    col_list = ast.literal_eval(color_text)
-                    if not (isinstance(col_list, (list, tuple)) and len(col_list) == 3):
-                        raise ValueError("Enter [r, g, b] for color")
-                    cr, cg, cb = float(col_list[0]), float(col_list[1]), float(col_list[2])
-                    print(f"Parsed color from text: [{cr}, {cg}, {cb}]")
-                else:
-                    cr, cg, cb = rows[selected, 3:6].astype(float)
-                    print(f"Using existing color: [{cr}, {cg}, {cb}]")
-                # Snapshot before edit
-                self.game.push_undo_snapshot("Edit vertex")
-                rows[selected, :3] = [px, py, pz]
-                rows[selected, 3:6] = [cr, cg, cb]
-                verticesHolder.vertices = rows.astype('f4').flatten()
-                self.game.current_color = [cr, cg, cb]
-                print(f"Updated vertex {selected} to pos={[px,py,pz]} color={[cr,cg,cb]}")
-            else:
-                # Multi-select: apply color to all selected vertices; ignore position
-                color_text = (self.game.edit_color_text or "").strip()
-                print(f"Processing bulk color text: '{color_text}' for {selected_count} vertices")
-                if not color_text:
-                    # Nothing to apply
-                    self.game.edit_mode = False
-                    self.game.edit_text = ""
-                    self.game.edit_pos_text = ""
-                    self.game.edit_color_text = ""
-                    return
-                col_list = ast.literal_eval(color_text)
-                if not (isinstance(col_list, (list, tuple)) and len(col_list) == 3):
-                    raise ValueError("Enter [r, g, b] for color")
-                cr, cg, cb = float(col_list[0]), float(col_list[1]), float(col_list[2])
-                # Snapshot before edit
-                self.game.push_undo_snapshot("Edit vertex colors")
-                indices = sorted(list(self.game.selected_vertices))
-                rows[indices, 3:6] = [cr, cg, cb]
-                verticesHolder.vertices = rows.astype('f4').flatten()
-                self.game.current_color = [cr, cg, cb]
-                print(f"Updated {len(indices)} vertices' colors to {[cr, cg, cb]}")
-            # Common tail: close UI and update buffer
-            self.game.edit_mode = False
-            self.game.edit_text = ""
-            self.game.edit_pos_text = ""
-            self.game.edit_color_text = ""
-            self.game.renderer.renderer3D.update_vertex_buffer()
-        except Exception as e:
-            print(f"Invalid edit input: {e}")
-            raise
+        return self.vertex_editor.apply_edit()
 
     def apply_add_vertex(self):
-        # Parse position and optional color from separate fields
-        pos_text = (self.game.add_vertex_pos_text or "").strip()
-        color_text = (self.game.add_vertex_color_text or "").strip()
-        try:
-            pos = ast.literal_eval(pos_text)
-        except Exception:
-            self.game.add_vertex_error = "Invalid position. Use [x, y, z]."
-            return
-        if not (isinstance(pos, (list, tuple)) and len(pos) == 3):
-            self.game.add_vertex_error = "Position must be [x, y, z]."
-            return
-        try:
-            x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
-        except Exception:
-            self.game.add_vertex_error = "Coordinates must be numbers."
-            return
-        color_specified = False
-        if color_text:
-            try:
-                col = ast.literal_eval(color_text)
-            except Exception:
-                self.game.add_vertex_error = "Invalid color. Use [r, g, b]."
-                return
-            if not (isinstance(col, (list, tuple)) and len(col) == 3):
-                self.game.add_vertex_error = "Color must be [r, g, b]."
-                return
-            try:
-                cr, cg, cb = float(col[0]), float(col[1]), float(col[2])
-                color_specified = True
-            except Exception:
-                self.game.add_vertex_error = "Color values must be numbers."
-                return
-        else:
-            cr, cg, cb = self.game.current_color if hasattr(self.game, 'current_color') else (1.0, 1.0, 1.0)
-
-        # Snapshot before mutating geometry
-        self.game.push_undo_snapshot("Add vertex")
-        current_count = len(verticesHolder.vertices) // 6
-        if not color_specified:
-            if current_count % 3 == 0:
-                # New triangle group, rotate to a new current color
-                self.game.current_color = self.game.random_color()
-            cr, cg, cb = self.game.current_color
-        else:
-            # Respect user-specified color and continue using it
-            self.game.current_color = [cr, cg, cb]
-
-        new_vertex = [x, y, z, cr, cg, cb]
-        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
-        # After appending, trim any trailing duplicates by position
-        self._remove_trailing_duplicate_vertices()
-        self.game.renderer.renderer3D.update_vertex_buffer()
-        print(f"New vertex added: {[x, y, z]} color={[cr, cg, cb]}")
-        self.game.add_vertex_mode = False
-        self.game.add_vertex_text = ""
-        self.game.add_vertex_pos_text = ""
-        self.game.add_vertex_color_text = ""
-        self.game.add_vertex_error = ""
+        return self.vertex_editor.apply_add_vertex()
 
     def _remove_trailing_duplicate_vertices(self) -> int:
-        """Remove any trailing vertices that duplicate an earlier vertex position.
-        Returns the number of rows removed. Only trims from the tail to avoid
-        disturbing earlier indexing; compares by rounded positions to 1e-6.
-        """
-        try:
-            rows = verticesHolder.vertices.reshape(-1, 6)
-            if len(rows) <= 1:
-                return 0
-            # Build a set of prior positions for quick lookup
-            def round_triplet(p):
-                return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
-
-            # Start from last row, remove consecutive tail rows whose position
-            # already occurred earlier in the array
-            removed = 0
-            keep_until = len(rows)
-            seen_prior = {round_triplet(rows[i, :3]) for i in range(len(rows) - 1)}
-            # Walk backward; as soon as we encounter a truly new position, stop
-            for i in range(len(rows) - 1, -1, -1):
-                pos_key = round_triplet(rows[i, :3])
-                if pos_key in seen_prior:
-                    keep_until = i
-                    removed += 1
-                else:
-                    break
-            if removed > 0:
-                rows = rows[:keep_until]
-                verticesHolder.vertices = rows.astype('f4').flatten()
-            return removed
-        except Exception:
-            return 0
+        return self.vertex_editor.remove_trailing_duplicate_vertices()
 
     def add_vertex(self, x:float, y:float, z:float):
-        assert isinstance(x, float), "x must be float"
-        assert isinstance(y, float), "y must be float"
-        assert isinstance(z, float), "z must be float"
-        
-        # Snapshot before mutating geometry
-        self.game.push_undo_snapshot("Add vertex")
-        current_count = len(verticesHolder.vertices) // 6
-        if current_count % 3 == 0:
-            self.game.current_color = self.game.random_color()
-        
-        new_vertex = [x, y, z] + self.game.current_color
-        verticesHolder.vertices = np.append(verticesHolder.vertices, new_vertex).astype('f4')
-        # After appending, trim any trailing duplicates by position
-        self._remove_trailing_duplicate_vertices()
-        self.game.renderer.renderer3D.update_vertex_buffer()
-        print(f"New vertex added: {new_vertex[:3]}")
+        return self.vertex_editor.add_vertex(x, y, z)
 
     def apply_extrude(self):
-        text = (self.game.extrude_text or "").strip()
-        if text.count('[') > 1:
-            last_open = text.rfind('[')
-            last_close = text.rfind(']')
-            if last_close != -1 and last_close > last_open:
-                text = text[last_open:last_close+1]
-            else:
-                text = text[last_open:]
-        try:
-            parsed = ast.literal_eval(text)
-        except (ValueError, SyntaxError):
-            self.game.extrude_error = "Invalid format. Use [x, y, z] with numbers."
-            return
-        if not (isinstance(parsed, (list, tuple)) and len(parsed) == 3):
-            self.game.extrude_error = "Enter exactly three numbers like [1.0, 2.0, 3.0]."
-            return
-        try:
-            px, py, pz = (float(parsed[0]), float(parsed[1]), float(parsed[2]))
-        except (TypeError, ValueError):
-            self.game.extrude_error = "Coordinates must be numbers."
-            return
-
-        if len(self.game.selected_vertices) == 0:
-            self.game.extrude_mode = False
-            self.game.extrude_text = ""
-            self.game.extrude_error = ""
-            return
-
-        last_idx = None
-        if self.game.last_selected_vertex_index is not None:
-            last_idx = self.game.last_selected_vertex_index
-        elif len(self.game.selected_vertices) > 0:
-            last_idx = max(self.game.selected_vertices)
-        vertices = verticesHolder.vertices.reshape(-1, 6)
-        if last_idx is None or last_idx < 0 or last_idx >= len(vertices):
-            self.game.extrude_error = "Invalid last selected vertex."
-            return
-        # Base point used for offset (displayed in UI during extrude)
-        P = vertices[last_idx, :3].astype(float)
-        try:
-            self.game.extrude_base_index = last_idx
-            self.game.extrude_base_point = [float(P[0]), float(P[1]), float(P[2])]
-        except Exception:
-            pass
-        Pprime = np.array([px, py, pz], dtype=float)
-        offset = Pprime - P
-
-        selected = sorted(list(self.game.selected_vertices))
-        if not selected:
-            self.game.extrude_error = "No vertices selected."
-            return
-
-        # Snapshot before mutating geometry
-        self.game.push_undo_snapshot("Extrude selection")
-
-        # Copy selected to the end with translation; keep original colors for copies
-        new_rows = []
-        for i in selected:
-            pos = vertices[i, :3].astype(float) + offset
-            color = vertices[i, 3:6].astype(float)
-            new_rows.append(np.concatenate([pos, color]))
-        new_rows = np.array(new_rows, dtype=np.float32)
-
-        # Append to verticesHolder
-        if new_rows.size:
-            verticesHolder.vertices = np.append(verticesHolder.vertices, new_rows.flatten()).astype('f4')
-
-        # Build side faces between corresponding old/new vertices when possible
-        # We attempt to form triangles from quads (i,j) -> (i',j') where edges existed in selection
-        old_vertices = verticesHolder.vertices.reshape(-1, 6)
-        total_before = len(old_vertices) - len(new_rows)
-        index_map = {old_idx: total_before + k for k, old_idx in enumerate(selected)}
-
-        # Reuse the existing 'form triangles' logic for caps and sides
-        rows = verticesHolder.vertices.reshape(-1, 6)
-        used_fallback_for_sides = False
-        saved_selection = set(self.game.selected_vertices)
-        try:
-            # Cap the extruded copy by selecting only the new indices and forming triangles
-            new_indices = [index_map[i] for i in selected if i in index_map]
-            if len(new_indices) >= 3:
-                self.game.selected_vertices = set(new_indices)
-                self.triangle_filler.form_triangles_from_selected()
-
-            # Order the original selected vertices around their centroid to walk the perimeter
-            if len(selected) >= 3:
-                sel_positions = np.array([rows[i, :3].astype(float) for i in selected], dtype=np.float64)
-                centroid = sel_positions.mean(axis=0)
-                centered = sel_positions - centroid
-                if np.linalg.norm(centered) > 0:
-                    U, S, Vt = np.linalg.svd(centered, full_matrices=False)
-                    u_axis = Vt[0]
-                    v_axis = Vt[1] if Vt.shape[0] > 1 else np.array([0.0, 1.0, 0.0])
-                    proj_u = centered.dot(u_axis)
-                    proj_v = centered.dot(v_axis)
-                    pts2 = np.stack([proj_u, proj_v], axis=1)
-                    sorted_idx = sorted(range(len(pts2)), key=lambda i: (pts2[i][0], pts2[i][1]))
-                    def cross(o, a, b):
-                        return (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0])
-                    lower = []
-                    for i in sorted_idx:
-                        while len(lower) >= 2 and cross(pts2[lower[-2]], pts2[lower[-1]], pts2[i]) <= 0:
-                            lower.pop()
-                        lower.append(i)
-                    upper = []
-                    for i in reversed(sorted_idx):
-                        while len(upper) >= 2 and cross(pts2[upper[-2]], pts2[upper[-1]], pts2[i]) <= 0:
-                            upper.pop()
-                        upper.append(i)
-                    hull_idx = lower[:-1] + upper[:-1]
-                    if len(hull_idx) < 3:
-                        angles = np.arctan2(pts2[:,1], pts2[:,0])
-                        hull_idx = list(np.argsort(angles))
-                    ordered = [selected[int(k)] for k in hull_idx]
-
-                    # For each edge on the perimeter, select the quad's four vertices and form triangles
-                    for i in range(len(ordered)):
-                        a = ordered[i]
-                        b = ordered[(i + 1) % len(ordered)]
-                        a2 = index_map.get(a)
-                        b2 = index_map.get(b)
-                        if a2 is None or b2 is None:
-                            continue
-                        self.game.selected_vertices = {a, b, a2, b2}
-                        self.triangle_filler.form_triangles_from_selected()
-                    used_fallback_for_sides = True
-        finally:
-            # Restore selection
-            self.game.selected_vertices = saved_selection
-
-        # After using the generic filling, optionally run raycast cleanup only in Cleanup Mode
-        if (not used_fallback_for_sides) and getattr(self.game, 'cleanup_mode', False):
-            self.remove_internal_edges_via_raycasts()
-
-        # Remove the raw extruded copy rows (they were only used as positional sources for triangulation)
-        try:
-            rows_all = verticesHolder.vertices.reshape(-1, 6)
-            new_copy_indices = [index_map[i] for i in selected if i in index_map]
-            if new_copy_indices:
-                keep_mask = np.ones(len(rows_all), dtype=bool)
-                keep_mask[new_copy_indices] = False
-                rows_kept = rows_all[keep_mask]
-                verticesHolder.vertices = rows_kept.astype('f4').flatten()
-        except Exception as _:
-            # Best-effort cleanup; ignore failures
-            pass
-
-        # Done; update GPU and exit mode
-        self.game.renderer.renderer3D.update_vertex_buffer()
-        self.game.extrude_mode = False
-        self.game.extrude_text = ""
-        self.game.extrude_error = ""
-        # Clear extrude base indicators and highlights
-        try:
-            if hasattr(self.game, 'extrude_base_index'):
-                delattr(self.game, 'extrude_base_index')
-            if hasattr(self.game, 'extrude_base_point'):
-                delattr(self.game, 'extrude_base_point')
-            self.game.yellow_highlights.clear()
-        except Exception:
-            pass
+        return self.extrude_controller.apply_extrude()
 
     def _get_extrude_base_index_and_point(self):
-        try:
-            vertices = verticesHolder.vertices.reshape(-1, 6)
-            if len(vertices) == 0:
-                return None, None
-            last_idx = None
-            if self.game.last_selected_vertex_index is not None:
-                last_idx = self.game.last_selected_vertex_index
-            elif len(self.game.selected_vertices) > 0:
-                last_idx = max(self.game.selected_vertices)
-            if last_idx is None or last_idx < 0 or last_idx >= len(vertices):
-                return None, None
-            P = vertices[last_idx, :3].astype(float)
-            return last_idx, P
-        except Exception:
-            return None, None
+        return self.extrude_controller.get_extrude_base_index_and_point()
 
     def save_vertices(self):
-        # Normalize filename and coerce to an actual file path on Windows
-        try:
-            normalized = self._normalize_file_input(self.game.filename_text)
-            if normalized:
-                self.game.filename_text = normalized
-            filename = normalized or self.game.filename_text
-            if filename:
-                # If a directory (including drive roots like 'C:\\'), append a default file name
-                if os.path.isdir(filename):
-                    filename = os.path.join(filename, 'untitled.vertices')
-                # If no extension, default to .vertices
-                root, ext = os.path.splitext(filename)
-                if not ext:
-                    filename = filename + '.vertices'
-                # Reflect any adjustment back to UI/state
-                self.game.filename_text = filename
-        except Exception:
-            filename = self.game.filename_text
-        vertices = verticesHolder.vertices.reshape(-1, 6)
-        with open(filename, 'w') as file:
-            for vertex in vertices:
-                file.write(f"{' '.join(map(str, vertex))}\n")
-        print(f"Vertices saved to {filename}")
+        return self.file_controller.save_vertices()
 
     def apply_filename_edit(self):
-        # Exit filename edit mode and immediately save to the new file
-        self.game.filename_edit_mode = False
-        # Normalize input once when applying
-        try:
-            normalized = self._normalize_file_input(self.game.filename_text)
-            if normalized:
-                self.game.filename_text = normalized
-        except Exception:
-            pass
-        purpose = getattr(self.game, 'filename_edit_purpose', 'save')
-        if purpose == 'new':
-            print(f"New file name set to: {self.game.filename_text}. Clearing all vertices.")
-            try:
-                verticesHolder.vertices = np.array([], dtype='f4')
-                self.game.selected_vertices.clear()
-                self.game.yellow_highlights.clear()
-                self.game.uiOverlayCreator.scroll_offset = 0
-                self.game.current_color = self.game.random_color()
-                self.game.renderer.renderer3D.update_vertex_buffer()
-                set_last_file(self.game.filename_text)
-            except Exception as e:
-                print(f"Error clearing vertices for new file {self.game.filename_text}: {e}")
-            finally:
-                self.game.filename_edit_purpose = 'save'
-                # Reset last selected vertex reference on new file
-                self.game.last_selected_vertex_index = None
-        elif purpose == 'open':
-            self._open_vertices_file(self.game.filename_text)
-            self.game.filename_edit_purpose = 'save'
-            # Reset last selected vertex reference on open
-            self.game.last_selected_vertex_index = None
-        else:
-            print(f"Save filename set to: {self.game.filename_text}")
-            try:
-                self.save_vertices()
-                set_last_file(self.game.filename_text)
-            except Exception as e:
-                print(f"Error saving to {self.game.filename_text}: {e}")
+        return self.file_controller.apply_filename_edit()
 
     def _normalize_file_input(self, text: str) -> str:
-        s = (text or '').strip()
-        if not s:
-            return s
-        # Convert to a normalized path (removes trailing separators except roots)
-        s = os.path.normpath(s)
-        return s
+        return self.file_controller.normalize_file_input(text)
 
     def _open_vertices_file(self, path: str):
-        print(f"Opening file: {path}")
-        try:
-            loaded = load_vertices_from_file(path)
-            verticesHolder.vertices = loaded
-            self.game.selected_vertices.clear()
-            self.game.yellow_highlights.clear()
-            self.game.uiOverlayCreator.scroll_offset = 0
-
-            total_vertices = len(verticesHolder.vertices) // 6
-            if total_vertices > 0:
-                if total_vertices % 3 == 0:
-                    self.game.current_color = self.game.random_color()
-                else:
-                    last_vertex = verticesHolder.vertices[-6:]
-                    self.game.current_color = last_vertex[3:6].tolist()
-            else:
-                self.game.current_color = self.game.random_color()
-
-            self.game.renderer.renderer3D.update_vertex_buffer()
-            print(f"Loaded vertices from {path}: count={(len(verticesHolder.vertices)//6)}")
-            set_last_file(path)
-        except Exception as e:
-            print(f"Error opening {path}: {e}")
+        return self.file_controller.open_vertices_file(path)
 
     def start_file_picker(self):
-        try:
-            current = self.game.filename_text or ""
-            normalized = self._normalize_file_input(current)
-            current = normalized if normalized else current
-        except Exception:
-            current = ""
-        # Determine directory to list
-        directory = None
-        if current:
-            if os.path.isdir(current):
-                directory = current
-            else:
-                directory = os.path.dirname(current)
-        if not directory:
-            try:
-                this_dir = os.path.dirname(os.path.abspath(__file__))
-                project_root = os.path.dirname(os.path.dirname(this_dir))
-                fallback = os.path.join(project_root, 'assets')
-                directory = fallback if os.path.isdir(fallback) else os.getcwd()
-            except Exception:
-                directory = os.getcwd()
-        # Gather files
-        try:
-            entries = os.listdir(directory)
-        except Exception:
-            entries = []
-        full_paths = []
-        for name in sorted(entries, key=lambda n: n.lower()):
-            fp = os.path.join(directory, name)
-            if os.path.isfile(fp):
-                full_paths.append(fp)
-        vertices_files = [p for p in full_paths if p.lower().endswith('.vertices')]
-        items = vertices_files if vertices_files else full_paths
-        self.game.file_picker_dir = directory
-        self.game.file_picker_items = items
-        # Select current file if present, else first
-        try:
-            idx = items.index(current) if current in items else 0
-        except Exception:
-            idx = 0
-        if items:
-            self.game.file_picker_index = max(0, min(len(items) - 1, idx))
-            self.game.file_picker_scroll = max(0, self.game.file_picker_index - (self.game.file_picker_max_visible // 2))
-        else:
-            self.game.file_picker_index = 0
-            self.game.file_picker_scroll = 0
-        self.game.file_picker_item_rects = []
-        self.game.file_picker_mode = True
+        return self.file_controller.start_file_picker()
 
     def handle_vertex_list_click(self, x, y, ctrl_pressed):
-        for actual_index, rect in self.game.uiOverlayCreator.vertex_rects:
-            if rect.collidepoint(x, y):
-                if ctrl_pressed:
-                    if actual_index in self.game.selected_vertices:
-                        self.game.selected_vertices.remove(actual_index)
-                    else:
-                        self.game.selected_vertices.add(actual_index)
-                else:
-                    self.game.selected_vertices = {actual_index}
-                # Track last interacted vertex from the list click
-                self.game.last_selected_vertex_index = actual_index
-                # Sync edit mode and input fields to reflect the new selection
-                if len(self.game.selected_vertices) == 1:
-                    # Enter/refresh edit mode and prefill both fields
-                    self.game.edit_mode = True
-                    try:
-                        self._prefill_edit_fields(actual_index)
-                    except Exception:
-                        # On any failure, fall back to clearing fields but keep mode
-                        self.game.edit_pos_text = "[0.000, 0.000, 0.000]"
-                        self.game.edit_color_text = self._fmt_triplet(self.game.current_color)
-                        self.game.edit_focus = 'pos'
-                else:
-                    # Multi-select or empty selection: exit edit mode and clear fields
-                    self.game.edit_mode = False
-                    self.game.edit_text = ""
-                    self.game.edit_pos_text = ""
-                    self.game.edit_color_text = ""
-                return True
-        return False
+        return self.selection_controller.handle_vertex_list_click(x, y, ctrl_pressed)
 
     def handle_scroll(self, y):
-        total_vertices = len(verticesHolder.vertices) // 6
-        if y > 0:  # Scroll up
-            self.game.uiOverlayCreator.scroll_offset = max(0, self.game.uiOverlayCreator.scroll_offset - self.game.scroll_speed)
-        else:  # Scroll down
-            max_offset = max(0, total_vertices - self.game.uiOverlayCreator.max_visible_vertices)
-            self.game.uiOverlayCreator.scroll_offset = min(max_offset, self.game.uiOverlayCreator.scroll_offset + self.game.scroll_speed) 
+        return self.selection_controller.handle_scroll(y)
 
     def remove_backfacing_triangles(self):
-        vertices = verticesHolder.vertices
-        if vertices.size == 0:
-            return
-        rows = vertices.reshape(-1, 6)
-        num_tri = len(rows) // 3
-        if num_tri == 0:
-            return
-
-        # Object-centric orientation: outward is away from object bounding-box center
-        all_positions = rows[:, :3]
-        if len(all_positions) > 0:
-            mins = np.min(all_positions, axis=0)
-            maxs = np.max(all_positions, axis=0)
-            object_center = (mins + maxs) * 0.5
-        else:
-            object_center = np.array([0.0, 0.0, 0.0])
-
-        def tri_outward(t_index:int) -> bool:
-            i0 = t_index * 3
-            p0 = rows[i0, :3]
-            p1 = rows[i0 + 1, :3]
-            p2 = rows[i0 + 2, :3]
-            p0 = np.array(p0, dtype=float)
-            p1 = np.array(p1, dtype=float)
-            p2 = np.array(p2, dtype=float)
-            normal = np.cross(p1 - p0, p2 - p0)
-            norm_len = np.linalg.norm(normal)
-            if norm_len == 0:
-                return False
-            tri_center = (p0 + p1 + p2) / 3.0
-            from_object_center = tri_center - object_center
-            dot = float(np.dot(normal, from_object_center))
-            eps = 1e-8 * (np.linalg.norm(from_object_center) * norm_len + 1.0)
-            return dot >= -eps
-
-        flipped = 0
-        for t in range(num_tri):
-            if not tri_outward(t):
-                i0 = t * 3
-                # Swap rows i0+1 and i0+2 to flip winding
-                tmp = rows[i0 + 1].copy()
-                rows[i0 + 1] = rows[i0 + 2]
-                rows[i0 + 2] = tmp
-                flipped += 1
-
-        # Remove duplicate triangles (same three positions, ignoring order and colors)
-        num_tri_after = len(rows) // 3
-        seen = set()
-        keep_row_indices = []
-        duplicates_removed = 0
-
-        def canonical_key(p0, p1, p2):
-            def round_triplet(p):
-                return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
-            pts = sorted([round_triplet(p0), round_triplet(p1), round_triplet(p2)])
-            return tuple(pts)
-
-        for t in range(num_tri_after):
-            i0 = t * 3
-            p0 = rows[i0, :3]
-            p1 = rows[i0 + 1, :3]
-            p2 = rows[i0 + 2, :3]
-            key = canonical_key(p0, p1, p2)
-            if key in seen:
-                duplicates_removed += 1
-                continue
-            seen.add(key)
-            keep_row_indices.extend([i0, i0 + 1, i0 + 2])
-
-        if duplicates_removed > 0:
-            rows = rows[keep_row_indices]
-
-        if flipped == 0 and duplicates_removed == 0:
-            print("No inward-facing triangles to fix or duplicate triangles to remove.")
-            return
-
-        if duplicates_removed > 0:
-            print(f"Removed {duplicates_removed} duplicate triangle(s).")
-
-        verticesHolder.vertices = rows.astype('f4').flatten()
-
-        # Clear selection and editing state
-        self.game.selected_vertices.clear()
-        self.game.edit_mode = False
-        self.game.edit_text = ""
-        self.game.yellow_highlights.clear()
-
-        # Maintain current color for subsequent additions
-        total_vertices = len(verticesHolder.vertices) // 6
-        if total_vertices > 0:
-            if total_vertices % 3 == 0:
-                self.game.current_color = self.game.random_color()
-            else:
-                last_vertex_color = verticesHolder.vertices[-3:]
-                self.game.current_color = last_vertex_color.tolist()
-        else:
-            self.game.current_color = self.game.random_color()
-
-        self.game.renderer.renderer3D.update_vertex_buffer()
-        print(f"Fixed winding for {flipped} inward-facing triangle(s).")
-        # Clear last selected after geometry reorientation
-        self.game.last_selected_vertex_index = None
+        return self.backface_triangle_fixer.fix_backfaces_and_remove_duplicates(self.game)
 
     def toggle_cleanup_mode(self):
-        # Exit conflicting modes when entering cleanup
-        self.game.cleanup_mode = not self.game.cleanup_mode
-        # Clear any cleanup inspection overlays whenever the mode toggles
-        self.game.cleanup_position_overlays = []
-        self.game.cleanup_position_wireframes = []
-        if self.game.cleanup_mode:
-            # Clear text edit modes and rotation states
-            self.game.add_vertex_mode = False
-            self.game.filename_edit_mode = False
-            self.game.edit_mode = False
-            self.game.extrude_mode = False
-            # Exit shapes mode and clear any shape flow
-            if getattr(self.game, 'shapes_mode', False):
-                try:
-                    self.cancel_shape_flow(clear_error=True)
-                except Exception:
-                    pass
-                self.game.shapes_mode = False
-            self.mouse_button_rotation_held = False
-            self.rotate_key_held = False
-            self.game.set_status("Cleanup Mode ON", 120)
-        else:
-            self.game.set_status("Cleanup Mode OFF", 120)
+        return self.cleanup_mode_controller.toggle_cleanup_mode()
 
     def show_triangles_matching_selected_positions(self):
-        """
-        Cleanup helper: overlay every triangle whose three vertex positions match any of the
-        currently selected vertex positions (by coordinate, ignoring color and index).
-        """
-        try:
-            rows = verticesHolder.vertices.reshape(-1, 6)
-        except Exception:
-            self.game.cleanup_position_overlays = []
-            self.game.set_status("No vertices available", 180)
-            return
-
-        selected_indices = [i for i in self.game.selected_vertices if 0 <= i < len(rows)]
-        self.game.cleanup_position_overlays = []
-        self.game.cleanup_position_wireframes = []
-
-        if not selected_indices:
-            self.game.set_status("Select at least one vertex to inspect", 180)
-            return
-
-        pos = rows[:, :3]
-        num_tri = len(rows) // 3
-        if num_tri == 0:
-            self.game.set_status("No triangles to inspect", 180)
-            return
-
-        def pos_key(p):
-            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
-
-        selected_keys = {pos_key(pos[i]) for i in selected_indices}
-        overlays = []
-        wireframes = []
-        colors = [
-            (255, 0, 0, 120),     # red
-            (0, 255, 0, 120),     # green
-            (0, 0, 255, 120),     # blue
-            (255, 255, 0, 120),   # yellow
-            (255, 0, 255, 120),   # magenta
-            (0, 255, 255, 120),   # cyan
-            (255, 128, 0, 120),   # orange
-            (128, 0, 255, 120),   # purple
-            (128, 128, 128, 120), # gray
-        ]
-
-        color_index = 0
-        overlay_tri_indices = set()
-        for t in range(num_tri):
-            i0 = t * 3
-            tri_indices = [i0 + 0, i0 + 1, i0 + 2]
-            if any(idx >= len(pos) for idx in tri_indices):
-                continue
-            tri_pos = pos[tri_indices]
-            if not all(pos_key(p) in selected_keys for p in tri_pos):
-                continue
-            screen_pts = self.game.renderer.renderer3D.world_to_screen(tri_pos)
-            if np.isnan(screen_pts).any():
-                continue
-            color = colors[color_index % len(colors)]
-            color_index += 1
-            overlay_tri_indices.add(t)
-            label_lines = [
-                f"p0 [{tri_pos[0][0]:.4f}, {tri_pos[0][1]:.4f}, {tri_pos[0][2]:.4f}]",
-                f"p1 [{tri_pos[1][0]:.4f}, {tri_pos[1][1]:.4f}, {tri_pos[1][2]:.4f}]",
-                f"p2 [{tri_pos[2][0]:.4f}, {tri_pos[2][1]:.4f}, {tri_pos[2][2]:.4f}]",
-            ]
-            centroid = np.mean(screen_pts, axis=0)
-            overlays.append({
-                'triangle_index': t,
-                'screen_pts': [(float(screen_pts[0][0]), float(screen_pts[0][1])),
-                               (float(screen_pts[1][0]), float(screen_pts[1][1])),
-                               (float(screen_pts[2][0]), float(screen_pts[2][1]))],
-                'color': color,
-                'labels': label_lines,
-                'label_pos': (float(centroid[0]), float(centroid[1])),
-            })
-
-        # Build wireframe overlays for non-matching triangles (to avoid global wireframe)
-        for t in range(num_tri):
-            if t in overlay_tri_indices:
-                continue
-            i0 = t * 3
-            tri_indices = [i0 + 0, i0 + 1, i0 + 2]
-            if any(idx >= len(pos) for idx in tri_indices):
-                continue
-            tri_pos = pos[tri_indices]
-            screen_pts = self.game.renderer.renderer3D.world_to_screen(tri_pos)
-            if np.isnan(screen_pts).any():
-                continue
-            wireframes.append([
-                (float(screen_pts[0][0]), float(screen_pts[0][1])),
-                (float(screen_pts[1][0]), float(screen_pts[1][1])),
-                (float(screen_pts[2][0]), float(screen_pts[2][1])),
-            ])
-
-        self.game.cleanup_position_overlays = overlays
-        self.game.cleanup_position_wireframes = wireframes
-        self.game.set_status(f"Found {len(overlays)} triangle(s) using selected positions", 240)
+        return self.position_match_inspector.show_triangles_matching_selected_positions(self.game)
 
     def check_selected_edge_exists(self):
-        rows = verticesHolder.vertices.reshape(-1, 6)
-        if len(self.game.selected_vertices) != 2:
-            self.game.set_status("Select exactly two vertices to check edge", 180)
-            return
-        i_a, i_b = sorted(list(self.game.selected_vertices))
-        if i_a < 0 or i_b >= len(rows):
-            self.game.set_status("Selected vertex indices out of range", 180)
-            return
-        pos_a = rows[i_a, :3]
-        pos_b = rows[i_b, :3]
-
-        def same_point(p, q, tol=1e-6):
-            return (abs(float(p[0]) - float(q[0])) <= tol and
-                    abs(float(p[1]) - float(q[1])) <= tol and
-                    abs(float(p[2]) - float(q[2])) <= tol)
-
-        highlight_indices = set()
-        num_tri = len(rows) // 3
-        found_count = 0
-        for t in range(num_tri):
-            i0 = t * 3
-            tri_positions = [rows[i0 + 0, :3], rows[i0 + 1, :3], rows[i0 + 2, :3]]
-            edges = [(0, 1), (1, 2), (2, 0)]
-            for e0, e1 in edges:
-                p = tri_positions[e0]
-                q = tri_positions[e1]
-                if (same_point(p, pos_a) and same_point(q, pos_b)) or (same_point(p, pos_b) and same_point(q, pos_a)):
-                    found_count += 1
-                    highlight_indices.update({i0 + e0, i0 + e1})
-
-        if found_count > 0:
-            self.game.yellow_highlights = highlight_indices
-            self.game.uiOverlayCreator.scroll_offset = min(highlight_indices)
-            self.game.set_status(f"Edge exists; found in {found_count} triangle edge(s)", 240)
-        else:
-            self.game.set_status("No edge exists between selected vertices", 240)
+        return self.edge_existence_checker.check_selected_edge_exists(self.game)
 
     def remove_internal_edges_via_raycasts(self):
-        rows = verticesHolder.vertices.reshape(-1, 6)
-        num_rows = len(rows)
-        if num_rows < 3:
-            self.game.set_status("No triangles to process", 180)
-            return
-        num_tri = num_rows // 3
-
-        # Precompute triangle positions (float64 for robustness)
-        # Only operate on complete triangles to avoid reshape errors when rows % 3 != 0
-        tri_rows = rows[:num_tri * 3]
-        if num_tri == 0:
-            self.game.set_status("No triangles to process", 180)
-            return
-        tri_pos = tri_rows.reshape(num_tri, 3, 6)[:, :, :3].astype(np.float64)
-
-        # Map edges (by rounded position pairs) to triangles that contain them
-        def round_triplet(p):
-            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
-
-        edge_to_tris = {}
-        for t in range(num_tri):
-            p0, p1, p2 = tri_pos[t]
-            edges = [(p0, p1), (p1, p2), (p2, p0)]
-            for a, b in edges:
-                ra, rb = round_triplet(a), round_triplet(b)
-                key = tuple(sorted([ra, rb]))
-                edge_to_tris.setdefault(key, set()).add(t)
-
-        # Directions: 26-ish directions (axes, face diagonals, space diagonals)
-        dirs = []
-        base = [
-            (1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
-            (1, 1, 0), (1, -1, 0), (-1, 1, 0), (-1, -1, 0),
-            (1, 0, 1), (1, 0, -1), (-1, 0, 1), (-1, 0, -1),
-            (0, 1, 1), (0, 1, -1), (0, -1, 1), (0, -1, -1),
-            (1, 1, 1), (1, 1, -1), (1, -1, 1), (1, -1, -1),
-            (-1, 1, 1), (-1, 1, -1), (-1, -1, 1), (-1, -1, -1),
-        ]
-        for dx, dy, dz in base:
-            v = np.array([dx, dy, dz], dtype=np.float64)
-            n = np.linalg.norm(v)
-            if n > 0:
-                dirs.append(v / n)
-        dirs = np.array(dirs)
-
-        def ray_intersects_triangle(origin, direction, v0, v1, v2, eps=1e-8):
-            # Moller-Trumbore
-            edge1 = v1 - v0
-            edge2 = v2 - v0
-            pvec = np.cross(direction, edge2)
-            det = np.dot(edge1, pvec)
-            if -eps < det < eps:
-                return False, None
-            inv_det = 1.0 / det
-            tvec = origin - v0
-            u = np.dot(tvec, pvec) * inv_det
-            if u < 0.0 - eps or u > 1.0 + eps:
-                return False, None
-            qvec = np.cross(tvec, edge1)
-            v = np.dot(direction, qvec) * inv_det
-            if v < 0.0 - eps or u + v > 1.0 + eps:
-                return False, None
-            t = np.dot(edge2, qvec) * inv_det
-            if t <= eps:
-                return False, None
-            return True, t
-
-        def edge_is_internal(pa, pb, exclude_tris:set):
-            def fmt3(p):
-                return f"({float(p[0]):.3f}, {float(p[1]):.3f}, {float(p[2]):.3f})"
-            # Sample points along the edge (avoid endpoints)
-            samples = [0.25, 0.5, 0.75]
-            for alpha in samples:
-                origin = (1.0 - alpha) * pa + alpha * pb
-                # Require a hit in every sampled direction to consider interior
-                for d in dirs:
-                    hit_any = False
-                    for t_idx in range(num_tri):
-                        if t_idx in exclude_tris:
-                            continue
-                        v0, v1, v2 = tri_pos[t_idx]
-                        hit, _ = ray_intersects_triangle(origin, d, v0, v1, v2)
-                        if hit:
-                            hit_any = True
-                            break
-                    if not hit_any:
-                        print(f"[internal-edge] ray miss for edge {fmt3(pa)} -> {fmt3(pb)} at alpha={alpha:.2f}, dir=({float(d[0]):.3f}, {float(d[1]):.3f}, {float(d[2]):.3f})")
-                        return False
-            return True
-
-        triangles_to_remove = set()
-        internal_edge_count = 0
-        # Evaluate each unique edge once
-        for key, tri_set in edge_to_tris.items():
-            ra, rb = key
-            pa = np.array(ra, dtype=np.float64)
-            pb = np.array(rb, dtype=np.float64)
-            # Skip degenerate (zero-length) edges
-            length = np.linalg.norm(pb - pa)
-            if length < 1e-9:
-                continue
-            print(f"[internal-edge] checking edge {pa[0]:.3f},{pa[1]:.3f},{pa[2]:.3f} -> {pb[0]:.3f},{pb[1]:.3f},{pb[2]:.3f}; length={length:.3f}; shared_tris={len(tri_set)}")
-            if edge_is_internal(pa, pb, tri_set):
-                internal_edge_count += 1
-                for t_idx in tri_set:
-                    triangles_to_remove.add(t_idx)
-
-        if not triangles_to_remove:
-            self.game.set_status("No internal edges found", 240)
-            return
-
-        # Remove triangles (3 rows per triangle)
-        mask = np.ones(num_rows, dtype=bool)
-        for t_idx in triangles_to_remove:
-            i0 = t_idx * 3
-            mask[i0:i0+3] = False
-        new_rows = rows[mask]
-        verticesHolder.vertices = new_rows.astype('f4').flatten()
-
-        # Reset selection/UI and keep color continuity
-        self.game.selected_vertices.clear()
-        self.game.edit_mode = False
-        self.game.edit_text = ""
-        self.game.yellow_highlights.clear()
-
-        total_vertices = len(verticesHolder.vertices) // 6
-        if total_vertices > 0:
-            if total_vertices % 3 == 0:
-                self.game.current_color = self.game.random_color()
-            else:
-                last_vertex_color = verticesHolder.vertices[-3:]
-                self.game.current_color = last_vertex_color.tolist()
-        else:
-            self.game.current_color = self.game.random_color()
-
-        self.game.renderer.renderer3D.update_vertex_buffer()
-        removed_tris = len(triangles_to_remove)
-        self.game.set_status(f"Removed {removed_tris} triangles from {internal_edge_count} internal edge(s)", 300)
-        # Clear last selected after geometry changes
-        self.game.last_selected_vertex_index = None
+        return self.internal_edge_remover.remove_internal_edges_via_raycasts(self.game)
 
     
 
     def delete_selected_vertices(self):
-        if not self.game.selected_vertices:
-            return
-        try:
-            # Snapshot before deletion
-            self.game.push_undo_snapshot("Delete selected vertices")
-            vertices = verticesHolder.vertices
-            if vertices.size == 0:
-                return
-            vertex_rows = vertices.reshape(-1, 6)
-            max_index = len(vertex_rows) - 1
-            indices_to_delete = sorted([i for i in self.game.selected_vertices if 0 <= i <= max_index])
-            if not indices_to_delete:
-                return
-            keep_mask = np.ones(len(vertex_rows), dtype=bool)
-            keep_mask[indices_to_delete] = False
-            new_rows = vertex_rows[keep_mask]
-            verticesHolder.vertices = new_rows.astype('f4').flatten()
-
-            # Clear selection and editing state
-            self.game.selected_vertices.clear()
-            self.game.edit_mode = False
-            self.game.edit_text = ""
-            self.game.yellow_highlights.clear()
-
-            # Clamp scroll
-            total_vertices = len(verticesHolder.vertices) // 6
-            max_offset = max(0, total_vertices - self.game.uiOverlayCreator.max_visible_vertices)
-            self.game.uiOverlayCreator.scroll_offset = min(self.game.uiOverlayCreator.scroll_offset, max_offset)
-
-            # Maintain current color for subsequent additions
-            if total_vertices > 0:
-                if total_vertices % 3 == 0:
-                    self.game.current_color = self.game.random_color()
-                else:
-                    last_vertex_color = verticesHolder.vertices[-3:]
-                    self.game.current_color = last_vertex_color.tolist()
-            else:
-                self.game.current_color = self.game.random_color()
-
-            # Update GPU buffer
-            self.game.renderer.renderer3D.update_vertex_buffer()
-        except Exception as e:
-            print(f"Error deleting vertices: {e}")
-        finally:
-            # Reset last selected after deletions
-            self.game.last_selected_vertex_index = None
+        return self.vertex_editor.delete_selected_vertices()
 
     def clear_all_vertices(self):
-        try:
-            verticesHolder.vertices = np.array([], dtype='f4')
-            self.game.selected_vertices.clear()
-            self.game.yellow_highlights.clear()
-            self.game.uiOverlayCreator.scroll_offset = 0
-            self.game.current_color = self.game.random_color()
-            self.game.edit_mode = False
-            self.game.edit_text = ""
-            self.game.renderer.renderer3D.update_vertex_buffer()
-            print("All vertices cleared")
-        except Exception as e:
-            print(f"Error clearing all vertices: {e}")
-        finally:
-            # Reset last selected on clear
-            self.game.last_selected_vertex_index = None
+        return self.vertex_editor.clear_all_vertices()

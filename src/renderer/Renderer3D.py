@@ -28,6 +28,8 @@ class Renderer3D:
         self.mvp = self.prog['mvp']
         self.model = self.prog['model'] if 'model' in self.prog else None
         self.eye_position = self.prog['eye_position'] if 'eye_position' in self.prog else None
+        # Mild depth bias to reduce z-fighting between near-coplanar triangles (set per frame)
+        self.depth_bias = (1.0, 1.0)
 
     def load_shader(self, shader_path):
         with open(shader_path, 'r') as shader_file:
@@ -47,6 +49,12 @@ class Renderer3D:
         time = pygame.time.get_ticks() * 0.001
         mvp_matrix = self.get_mvp_matrix(time)
         self.mvp.write(mvp_matrix)
+        # Apply polygon offset for this frame, then restore
+        prev_offset = getattr(self.ctx, "polygon_offset", (0.0, 0.0))
+        try:
+            self.ctx.polygon_offset = self.depth_bias
+        except Exception:
+            prev_offset = None
         
         if self.model is not None:
             model_matrix = self.get_model_matrix(time)
@@ -65,6 +73,12 @@ class Renderer3D:
             print("OpenGL error:")
             print(self.ctx.error)
             exit(1)
+        # Restore polygon offset if supported
+        if prev_offset is not None:
+            try:
+                self.ctx.polygon_offset = prev_offset
+            except Exception:
+                pass
 
     def get_model_matrix(self, time):
         if rotate_object:

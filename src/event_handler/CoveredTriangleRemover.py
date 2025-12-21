@@ -31,11 +31,48 @@ class CoveredTriangleRemover:
         rows = verticesHolder.vertices.reshape(-1, 6)
         num_rows = len(rows)
 
+        # First, mark degenerate triangles (zero area or repeated vertices)
+        triangles_to_remove = set()
+        for t in range(len(tri_pos)):
+            p0, p1, p2 = tri_pos[t]
+            # Repeat check
+            if (np.allclose(p0, p1, atol=1e-9) or
+                    np.allclose(p1, p2, atol=1e-9) or
+                    np.allclose(p0, p2, atol=1e-9)):
+                triangles_to_remove.add(t)
+                try:
+                    i0 = t * 3
+                    i1 = i0 + 1
+                    i2 = i0 + 2
+                    msg = (
+                        f"[degenerate] removing tri {t} rows [{i0},{i1},{i2}] due to repeated vertex"
+                    )
+                    self._log_lines([msg])
+                except Exception:
+                    pass
+                continue
+            # Zero-area check (collinear)
+            area = np.linalg.norm(np.cross(p1 - p0, p2 - p0))
+            if area <= 1e-12:
+                triangles_to_remove.add(t)
+                try:
+                    i0 = t * 3
+                    i1 = i0 + 1
+                    i2 = i0 + 2
+                    msg = (
+                        f"[degenerate] removing tri {t} rows [{i0},{i1},{i2}] due to zero area"
+                    )
+                    self._log_lines([msg])
+                except Exception:
+                    pass
+
         # Build plane buckets
         #Plane buckets = groups of triangles that lie on (approximately) the same plane.
         plane_to_tri_indices = {}
         num_tri = len(tri_pos)
         for t in range(num_tri):
+            if t in triangles_to_remove:
+                continue  # already marked degenerate
             p0, p1, p2 = tri_pos[t]
             key = self._plane_key(p0, p1, p2)
             if key is None:
@@ -44,7 +81,6 @@ class CoveredTriangleRemover:
         self.debug_print(plane_to_tri_indices, tri_pos)
 
         # Projection and coverage test per bucket
-        triangles_to_remove = set()
         for plane_key, tri_indices in plane_to_tri_indices.items():
             if len(tri_indices) <= 1:
                 continue
@@ -171,7 +207,7 @@ class CoveredTriangleRemover:
             game.current_color = game.random_color()
 
         game.renderer.renderer3D.update_vertex_buffer()
-        game.set_status(f"Removed {len(triangles_to_remove)} fully covered triangle(s)", 300)
+        game.set_status(f"Removed {len(triangles_to_remove)} covered/degenerate triangle(s)", 300)
         game.last_selected_vertex_index = None
 
     def create_triangle_positions_array(self, game):
