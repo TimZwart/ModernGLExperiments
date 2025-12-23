@@ -18,6 +18,7 @@ from src.event_handler.ShapesController import ShapesController
 from src.event_handler.FileController import FileController
 from src.event_handler.ExtrudeController import ExtrudeController
 from src.event_handler.CleanupModeController import CleanupModeController
+from src.event_handler.VerticesAnalyzeExporter import VerticesAnalyzeExporter
 import ast
 import os
 
@@ -39,6 +40,7 @@ class EventHandler:
         self.file_controller = FileController(game)
         self.extrude_controller = ExtrudeController(game, triangle_filler=self.triangle_filler, remove_internal_edges_callable=self.remove_internal_edges_via_raycasts)
         self.cleanup_mode_controller = CleanupModeController(game, clear_rotation_state=self._clear_rotation_state, cancel_shape_flow=self.cancel_shape_flow)
+        self.vertices_analyze_exporter = VerticesAnalyzeExporter()
         self.alternate_keys = {
             'forward': pygame.K_UP,
             'backward': pygame.K_DOWN,
@@ -282,6 +284,13 @@ class EventHandler:
                         continue
                     if event.key == pygame.key.key_code(keybindings.get('undo', 'z')):
                         self.game.undo_last_action()
+                        continue
+                    # Export analysis file (reuse Save keybinding in Cleanup Mode)
+                    if (('save_vertices' in keybindings) and event.key == pygame.key.key_code(keybindings['save_vertices'])) or event.key == self.alternate_keys['save_vertices']:
+                        try:
+                            self.vertices_analyze_exporter.export(self.game)
+                        except Exception as _:
+                            pass
                         continue
                     # Toggle cleanup mode
                     if event.key == pygame.key.key_code(keybindings.get('cleanup_mode', 'u')):

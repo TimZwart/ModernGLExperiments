@@ -625,6 +625,7 @@ class UIOverlayCreator:
             f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
             f"Remove Triangles Covered by Others: {keybindings.get('remove_covered', 'f4').upper()} or F4",
             f"Show Triangles Using Selected Positions: {keybindings.get('show_position_matches', 'f2').upper()} or F2",
+            f"Export .vertices.analyze: {keybindings.get('save_vertices', 'f5').upper()} or F5",
             f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             f"Help: {keybindings['help'].upper()} or F1 to close",
         ]
