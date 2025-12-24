@@ -53,6 +53,15 @@ class InternalEdgeRemover:
         def round_triplet(p):
             return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
 
+        # Fast membership test for "does this vertex position exist in the mesh?"
+        # Used for additional diagnostics when raycasts miss.
+        vertex_pos_set = set()
+        try:
+            for p in tri_pos.reshape(-1, 3):
+                vertex_pos_set.add(round_triplet(p))
+        except Exception:
+            vertex_pos_set = set()
+
         edge_to_tris = {}
         for t in range(num_tri):
             p0, p1, p2 = tri_pos[t]
@@ -105,6 +114,92 @@ class InternalEdgeRemover:
             def fmt3(p):
                 return f"({float(p[0]):.3f}, {float(p[1]):.3f}, {float(p[2]):.3f})"
 
+            def _detect_axis_aligned_box_diagonal(a, b):
+                """
+                Heuristic: detect whether edge a->b is a diagonal of an axis-aligned box/rectangle
+                whose corner vertices all exist in the current mesh (based on rounded positions).
+
+                Returns a dict with classification info, or None if not detected.
+                """
+                if not vertex_pos_set:
+                    return None
+
+                ra = round_triplet(a)
+                rb = round_triplet(b)
+
+                xmin, xmax = (min(ra[0], rb[0]), max(ra[0], rb[0]))
+                ymin, ymax = (min(ra[1], rb[1]), max(ra[1], rb[1]))
+                zmin, zmax = (min(ra[2], rb[2]), max(ra[2], rb[2]))
+
+                dx = abs(rb[0] - ra[0])
+                dy = abs(rb[1] - ra[1])
+                dz = abs(rb[2] - ra[2])
+
+                def present(pt):
+                    return pt in vertex_pos_set
+
+                # Space diagonal of an axis-aligned box: endpoints are opposite corners, and all 8 corners exist.
+                if dx > 0.0 and dy > 0.0 and dz > 0.0:
+                    c0 = (xmin, ymin, zmin)
+                    c7 = (xmax, ymax, zmax)
+                    if (ra == c0 and rb == c7) or (ra == c7 and rb == c0):
+                        corners = [
+                            (xmin, ymin, zmin),
+                            (xmax, ymin, zmin),
+                            (xmin, ymax, zmin),
+                            (xmax, ymax, zmin),
+                            (xmin, ymin, zmax),
+                            (xmax, ymin, zmax),
+                            (xmin, ymax, zmax),
+                            (xmax, ymax, zmax),
+                        ]
+                        missing = [c for c in corners if not present(c)]
+                        if not missing:
+                            return {
+                                "kind": "space",
+                                "xmin": xmin, "xmax": xmax,
+                                "ymin": ymin, "ymax": ymax,
+                                "zmin": zmin, "zmax": zmax,
+                                "corners": corners,
+                                "missing": [],
+                            }
+                        return {
+                            "kind": "space_partial",
+                            "xmin": xmin, "xmax": xmax,
+                            "ymin": ymin, "ymax": ymax,
+                            "zmin": zmin, "zmax": zmax,
+                            "corners": corners,
+                            "missing": missing,
+                        }
+
+                # Face diagonal of an axis-aligned rectangle (one axis constant): endpoints differ in exactly 2 axes.
+                diffs = int(dx > 0.0) + int(dy > 0.0) + int(dz > 0.0)
+                if diffs == 2:
+                    # Identify constant axis and build the 4 rectangle corners
+                    if dx == 0.0:
+                        x = ra[0]
+                        corners = [(x, ymin, zmin), (x, ymax, zmin), (x, ymin, zmax), (x, ymax, zmax)]
+                    elif dy == 0.0:
+                        y = ra[1]
+                        corners = [(xmin, y, zmin), (xmax, y, zmin), (xmin, y, zmax), (xmax, y, zmax)]
+                    else:
+                        z = ra[2]
+                        corners = [(xmin, ymin, z), (xmax, ymin, z), (xmin, ymax, z), (xmax, ymax, z)]
+                    missing = [c for c in corners if not present(c)]
+                    if not missing:
+                        return {
+                            "kind": "face",
+                            "corners": corners,
+                            "missing": [],
+                        }
+                    return {
+                        "kind": "face_partial",
+                        "corners": corners,
+                        "missing": missing,
+                    }
+
+                return None
+
             # Sample points along the edge (avoid endpoints)
             samples = [0.25, 0.5, 0.75]
             for alpha in samples:
@@ -137,6 +232,24 @@ class InternalEdgeRemover:
                             f"dir=({float(d[0]):.6f},{float(d[1]):.6f},{float(d[2]):.6f}) "
                             f"closest_hit_tri={closest_tri} closest_t={closest_t}",
                         ])
+                        # Additional heuristic: if this edge looks like a diagonal inside an axis-aligned box/rectangle,
+                        # log it explicitly so we can investigate why the raycast-based test missed.
+                        diag_info = _detect_axis_aligned_box_diagonal(pa, pb)
+                        if diag_info is not None:
+                            try:
+                                ra = round_triplet(pa)
+                                rb = round_triplet(pb)
+                                kind = diag_info.get("kind", "unknown")
+                                corners = diag_info.get("corners", [])
+                                missing = diag_info.get("missing", [])
+                                self._log_lines([
+                                    f"[diag-box] kind={kind} edge={ra}->{rb} "
+                                    f"alpha={alpha:.2f} dir=({float(d[0]):.6f},{float(d[1]):.6f},{float(d[2]):.6f})",
+                                    f"[diag-box] corners_present={len(corners) - len(missing)}/{len(corners)} "
+                                    f"missing={missing}",
+                                ])
+                            except Exception:
+                                pass
                         return False
             return True
 
