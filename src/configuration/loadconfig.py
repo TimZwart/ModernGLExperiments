@@ -57,6 +57,10 @@ if 'undo' not in keybindings:
 if 'cleanup_mode' not in keybindings:
     # Toggle cleanup mode on/off
     keybindings['cleanup_mode'] = 'u'
+# Default deselect all key if not provided
+if 'deselect_all' not in keybindings:
+    # Deselect all selected vertices
+    keybindings['deselect_all'] = '-'
 # Default key for removing fully covered triangles (cleanup mode only)
 if 'remove_covered' not in keybindings:
     keybindings['remove_covered'] = 'f4'

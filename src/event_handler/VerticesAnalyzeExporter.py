@@ -220,12 +220,13 @@ class VerticesAnalyzeExporter:
 
             # Write triangle label above its vertices
             lines.append(lbl)
+            # Write vertex lines
             for v in range(3):
                 pk = self._pos_key(tri[v])
                 coord_lbl = get_or_assign_coord_label(pk)
                 x, y, z = tri[v]
                 lines.append(f"{self._fmt_num(x)} {self._fmt_num(y)} {self._fmt_num(z)} {coord_lbl}")
-            lines.append("")  # blank line per triangle separator
+            lines.append("")  # blank line per triangle
 
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:

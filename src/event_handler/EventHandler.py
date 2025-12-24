@@ -19,6 +19,7 @@ from src.event_handler.FileController import FileController
 from src.event_handler.ExtrudeController import ExtrudeController
 from src.event_handler.CleanupModeController import CleanupModeController
 from src.event_handler.VerticesAnalyzeExporter import VerticesAnalyzeExporter
+from src.event_handler.DeselectController import DeselectController
 import ast
 import os
 
@@ -41,6 +42,7 @@ class EventHandler:
         self.extrude_controller = ExtrudeController(game, triangle_filler=self.triangle_filler, remove_internal_edges_callable=self.remove_internal_edges_via_raycasts)
         self.cleanup_mode_controller = CleanupModeController(game, clear_rotation_state=self._clear_rotation_state, cancel_shape_flow=self.cancel_shape_flow)
         self.vertices_analyze_exporter = VerticesAnalyzeExporter()
+        self.deselect_controller = DeselectController(game)
         self.alternate_keys = {
             'forward': pygame.K_UP,
             'backward': pygame.K_DOWN,
@@ -688,6 +690,9 @@ class EventHandler:
                     # Clear all vertices via configured key (e.g., X)
                     if 'clear_vertices' in keybindings and event.key == pygame.key.key_code(keybindings['clear_vertices']):
                         self.clear_all_vertices()
+                    # Deselect all vertices via configured key (e.g., D)
+                    if 'deselect_all' in keybindings and event.key == pygame.key.key_code(keybindings['deselect_all']):
+                        self.deselect_controller.deselect_all_vertices()
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
                 # Do not engage rotate when in shapes mode to allow key reuse (e.g., 'r' for Rectangle)
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
