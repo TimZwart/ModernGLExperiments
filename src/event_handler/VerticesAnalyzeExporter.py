@@ -10,6 +10,7 @@ class VerticesAnalyzeExporter:
 
     Format:
     - For each triangle: 3 vertex lines: "x y z <coordLabel>"
+    - Then an edge-length summary line: "<a>-<b> len L1, <b>-<c> len L2, <c>-<a> len L3"
     - Then a blank line
     - Then a triangle label line: "A", "B", ... or "A'", "A''", ... for parallel matches
     - Vertex coordinate labels are lowercase letters starting at 'n' for the first unique coordinate.
@@ -221,11 +222,24 @@ class VerticesAnalyzeExporter:
             # Write triangle label above its vertices
             lines.append(lbl)
             # Write vertex lines
+            tri_vertex_labels = []
             for v in range(3):
                 pk = self._pos_key(tri[v])
                 coord_lbl = get_or_assign_coord_label(pk)
+                tri_vertex_labels.append(coord_lbl)
                 x, y, z = tri[v]
                 lines.append(f"{self._fmt_num(x)} {self._fmt_num(y)} {self._fmt_num(z)} {coord_lbl}")
+            # Edge lengths (use the same vertex labels we just emitted)
+            try:
+                a, b, c = tri_vertex_labels[0], tri_vertex_labels[1], tri_vertex_labels[2]
+                ab = float(np.linalg.norm(tri[1] - tri[0]))
+                bc = float(np.linalg.norm(tri[2] - tri[1]))
+                ca = float(np.linalg.norm(tri[0] - tri[2]))
+                lines.append(
+                    f"{a}-{b} len {self._fmt_num(ab)}, {b}-{c} len {self._fmt_num(bc)}, {c}-{a} len {self._fmt_num(ca)}"
+                )
+            except Exception:
+                pass
             lines.append("")  # blank line per triangle
 
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

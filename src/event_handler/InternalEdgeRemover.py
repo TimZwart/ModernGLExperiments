@@ -23,6 +23,9 @@ class InternalEdgeRemover:
             pass
 
     def remove_internal_edges_via_raycasts(self, game) -> None:
+        # Map edges (by rounded position pairs) to triangles that contain them
+        def round_triplet(p):
+            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
         # Reset log per invocation (append a header for this run)
         try:
             import datetime as _dt
@@ -49,9 +52,6 @@ class InternalEdgeRemover:
             return
         tri_pos = tri_rows.reshape(num_tri, 3, 6)[:, :, :3].astype(np.float64)
 
-        # Map edges (by rounded position pairs) to triangles that contain them
-        def round_triplet(p):
-            return (round(float(p[0]), 6), round(float(p[1]), 6), round(float(p[2]), 6))
 
         # Fast membership test for "does this vertex position exist in the mesh?"
         # Used for additional diagnostics when raycasts miss.
@@ -172,31 +172,31 @@ class InternalEdgeRemover:
                             "missing": missing,
                         }
 
-                # Face diagonal of an axis-aligned rectangle (one axis constant): endpoints differ in exactly 2 axes.
-                diffs = int(dx > 0.0) + int(dy > 0.0) + int(dz > 0.0)
-                if diffs == 2:
-                    # Identify constant axis and build the 4 rectangle corners
-                    if dx == 0.0:
-                        x = ra[0]
-                        corners = [(x, ymin, zmin), (x, ymax, zmin), (x, ymin, zmax), (x, ymax, zmax)]
-                    elif dy == 0.0:
-                        y = ra[1]
-                        corners = [(xmin, y, zmin), (xmax, y, zmin), (xmin, y, zmax), (xmax, y, zmax)]
-                    else:
-                        z = ra[2]
-                        corners = [(xmin, ymin, z), (xmax, ymin, z), (xmin, ymax, z), (xmax, ymax, z)]
-                    missing = [c for c in corners if not present(c)]
-                    if not missing:
-                        return {
-                            "kind": "face",
-                            "corners": corners,
-                            "missing": [],
-                        }
-                    return {
-                        "kind": "face_partial",
-                        "corners": corners,
-                        "missing": missing,
-                    }
+#                # Face diagonal of an axis-aligned rectangle (one axis constant): endpoints differ in exactly 2 axes.
+#                diffs = int(dx > 0.0) + int(dy > 0.0) + int(dz > 0.0)
+#                if diffs == 2:
+#                    # Identify constant axis and build the 4 rectangle corners
+#                    if dx == 0.0:
+#                        x = ra[0]
+#                        corners = [(x, ymin, zmin), (x, ymax, zmin), (x, ymin, zmax), (x, ymax, zmax)]
+#                    elif dy == 0.0:
+#                        y = ra[1]
+#                        corners = [(xmin, y, zmin), (xmax, y, zmin), (xmin, y, zmax), (xmax, y, zmax)]
+#                    else:
+#                        z = ra[2]
+#                        corners = [(xmin, ymin, z), (xmax, ymin, z), (xmin, ymax, z), (xmax, ymax, z)]
+#                    missing = [c for c in corners if not present(c)]
+#                    if not missing:
+#                        return {
+#                            "kind": "face",
+#                            "corners": corners,
+#                            "missing": [],
+#                        }
+#                    return {
+#                        "kind": "face_partial",
+#                        "corners": corners,
+#                        "missing": missing,
+#                    }
 
                 return None
 
@@ -227,6 +227,7 @@ class InternalEdgeRemover:
                         )
                         # Also log to file so we can analyze failures.
                         self._log_lines([
+                            f"--------------------------------",
                             f"[miss] edge {fmt3(pa)} -> {fmt3(pb)} len={float(np.linalg.norm(pb - pa)):.6f} "
                             f"shared_tris={len(exclude_tris)} alpha={alpha:.2f} "
                             f"dir=({float(d[0]):.6f},{float(d[1]):.6f},{float(d[2]):.6f}) "
@@ -243,13 +244,19 @@ class InternalEdgeRemover:
                                 corners = diag_info.get("corners", [])
                                 missing = diag_info.get("missing", [])
                                 self._log_lines([
+                                    f"****************************************",
                                     f"[diag-box] kind={kind} edge={ra}->{rb} "
                                     f"alpha={alpha:.2f} dir=({float(d[0]):.6f},{float(d[1]):.6f},{float(d[2]):.6f})",
-                                    f"[diag-box] corners_present={len(corners) - len(missing)}/{len(corners)} "
-                                    f"missing={missing}",
+                                    f"corners_present={len(corners) - len(missing)}/{len(corners)} "
+                                    f"corners of the box/rectangle={corners} ",
+                                    f"missing corners not in the mesh={missing}",
+                                    f"****************************************",
                                 ])
                             except Exception:
                                 pass
+                        self._log_lines([
+                            f"--------------------------------",
+                        ])
                         return False
             return True
 
