@@ -168,7 +168,8 @@ class UIOverlayCreator:
                 if i in trailing_indices:
                     color = (128, 0, 128)
                 else:
-                    color = (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 0) if i in self.game.yellow_highlights else (255, 255, 255)
+                    tri_hl = getattr(self.game, 'triangle_highlights', set())
+                    color = (255, 0, 0) if i in self.game.selected_vertices else (255, 255, 0) if (i in self.game.yellow_highlights or i in tri_hl) else (255, 255, 255)
                 text_surface = self.font.render(vertex_text, True, color)
                 y_position = 40 + (i - self.scroll_offset) * 30
                 self.overlay.blit(text_surface, (10, y_position))
@@ -478,9 +479,10 @@ class UIOverlayCreator:
                 pass
 
         # If there are yellow highlights (e.g., candidate triangles), draw their vertices as yellow squares
-        if getattr(self.game, 'yellow_highlights', set()):
+        combined_hl = set(getattr(self.game, 'yellow_highlights', set())) | set(getattr(self.game, 'triangle_highlights', set()))
+        if combined_hl:
             try:
-                hl_indices = sorted(list(self.game.yellow_highlights))
+                hl_indices = sorted(list(combined_hl))
                 rows = verticesHolder.vertices.reshape(-1, 6)
                 pos = rows[hl_indices, :3]
                 pts = self.game.renderer.renderer3D.world_to_screen(pos)
@@ -490,6 +492,34 @@ class UIOverlayCreator:
                         pygame.draw.rect(self.overlay, (255, 255, 0, 255), rect, 2)
             except Exception:
                 pass
+
+        # Triangle selection tool: draw selected triangles (filled + outline) and a small panel.
+        if getattr(self.game, 'triangle_select_mode', False):
+            try:
+                rows = verticesHolder.vertices.reshape(-1, 6)
+                tri_set = list(getattr(self.game, 'selected_triangles', set()))
+                active = getattr(self.game, 'last_selected_triangle_index', None)
+                for t in tri_set:
+                    ti = int(t)
+                    i0 = ti * 3
+                    if i0 + 2 >= len(rows):
+                        continue
+                    pos = rows[[i0 + 0, i0 + 1, i0 + 2], :3]
+                    pts = self.game.renderer.renderer3D.world_to_screen(pos)
+                    if np.isnan(pts).any():
+                        continue
+                    poly = [(float(pts[0][0]), float(pts[0][1])), (float(pts[1][0]), float(pts[1][1])), (float(pts[2][0]), float(pts[2][1]))]
+                    if active is not None and int(active) == ti:
+                        fill = (0, 200, 255, 70)
+                        outline = (0, 255, 255, 230)
+                    else:
+                        fill = (0, 160, 200, 50)
+                        outline = (0, 200, 255, 180)
+                    pygame.draw.polygon(self.overlay, fill, poly)
+                    pygame.draw.polygon(self.overlay, outline, poly, 2)
+            except Exception:
+                pass
+            self._draw_triangle_selection_panel()
 
         # Cleanup inspector: draw triangles whose vertices share positions with the current selection
         if getattr(self.game, 'cleanup_mode', False) and getattr(self.game, 'cleanup_position_overlays', []):
@@ -519,6 +549,38 @@ class UIOverlayCreator:
             except Exception:
                 pass
 
+        # Internal triangle inspector: draw failing rays + a small report panel
+        # Note: rays remain visible even after leaving Cleanup Mode, so the user can move the camera around.
+        if getattr(self.game, 'internal_triangle_debug_rays', []):
+            try:
+                rays = list(getattr(self.game, 'internal_triangle_debug_rays', []))
+                # Build a list of endpoints for projection (origin+end per ray)
+                pts3d = []
+                for r in rays:
+                    pts3d.append(r.get('origin', [0.0, 0.0, 0.0]))
+                    pts3d.append(r.get('end', [0.0, 0.0, 0.0]))
+                pts3d = np.array(pts3d, dtype=float).reshape(-1, 3)
+                pts2d = self.game.renderer.renderer3D.world_to_screen(pts3d)
+                # Draw rays and hit labels
+                for i, r in enumerate(rays):
+                    a = pts2d[i * 2 + 0]
+                    b = pts2d[i * 2 + 1]
+                    ax, ay = float(a[0]), float(a[1])
+                    bx, by = float(b[0]), float(b[1])
+                    if np.isnan(ax) or np.isnan(ay) or np.isnan(bx) or np.isnan(by):
+                        continue
+                    color = r.get('color', (255, 0, 0, 220))
+                    pygame.draw.line(self.overlay, color, (ax, ay), (bx, by), 2)
+                    pygame.draw.circle(self.overlay, color, (int(bx), int(by)), 3)
+                    hits = int(r.get('hits', 0))
+                    di = int(r.get('dir_index', -1))
+                    label = f"d{di:02d}:{hits}"
+                    text = self.font.render(label, True, (255, 255, 255))
+                    self.overlay.blit(text, (bx + 6, by + 2))
+            except Exception:
+                pass
+            self._draw_internal_triangle_inspector_panel()
+
         # Draw disambiguation colored triangle overlays last (so they sit on top)
         if disambiguating:
             try:
@@ -535,9 +597,13 @@ class UIOverlayCreator:
                         pygame.draw.polygon(self.overlay, color, pts)
                         # Outline for clarity
                         pygame.draw.polygon(self.overlay, (255, 255, 255, 220), pts, 2)
-                hint = "Click a colored triangle to choose the vertex (Esc to cancel)"
+                kind = getattr(self.game, 'disambiguation_kind', 'vertex')
+                hint = "Click a colored triangle to choose (Esc to cancel)" if kind == 'triangle' else "Click a colored triangle to choose the vertex (Esc to cancel)"
                 hint_surf = self.font.render(hint, True, (255, 255, 255))
                 self.overlay.blit(hint_surf, (10, 10))
+                # For triangle disambiguation, also draw a clickable list panel.
+                if kind == 'triangle':
+                    self._draw_disambiguation_triangle_panel()
             except Exception:
                 pass
 
@@ -559,12 +625,13 @@ class UIOverlayCreator:
             "  then enter position [x, y, z] and color [r, g, b]",
             "  or press C to open color picker",
             "Delete Selected: Delete",
-            f"Clear All Vertices: {keybindings.get('clear_vertices', 'x').upper()}",
+            f"Deselect All: {keybindings.get('deselect_all', '-').upper()}",
             f"Save Vertices: {keybindings['save_vertices'].upper()} or F5",
             f"Change Filename: {keybindings['change_filename'].upper()} or F6",
             f"New File: {keybindings.get('new_file', 'n').upper()} or F9",
             f"Open File: {keybindings.get('open_file', 'b').upper()} or F3",
             f"Fill with triangles between selected points: {keybindings['form_triangles'].upper()} or F7",
+            f"Triangle Select Tool: {keybindings.get('select_triangles', 't').upper()} (click triangles; Ctrl+click multi-select)",
             f"Extrude selected: {keybindings.get('extrude', 'e').upper()} (enter P' [x, y, z])",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
@@ -583,7 +650,9 @@ class UIOverlayCreator:
             "Press H or F1 again to close help",
         ]
         y = 20
-        for text in help_texts[:-15]:
+        # Layout: move the last two items of the first column into the second column
+        second_col_count = 17
+        for text in help_texts[:-second_col_count]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
@@ -591,7 +660,7 @@ class UIOverlayCreator:
         # Put the remaining items on a second column
         second_col_x = self.width // 2 + 20
         y2 = 20
-        for text in help_texts[-15:]:
+        for text in help_texts[-second_col_count:]:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (second_col_x, y2))
             y2 += 30
@@ -619,9 +688,12 @@ class UIOverlayCreator:
         texts = [
             "Cleanup Mode:",
             f"Toggle Cleanup Mode (enter/exit): {keybindings.get('cleanup_mode', 'u').upper()}",
+            f"Clear All Vertices: {keybindings.get('clear_vertices', 'x').upper()}",
             f"Fix Inward-Facing Triangles (flip): {keybindings.get('remove_backfaces', 'f10').upper()} or F10",
             f"Check Edge (select 2 vertices): {keybindings.get('check_edge', 'f11').upper()} or F11",
             "  - Yellow = endpoints of matching triangle edge(s) in the vertex list",
+            f"Remove Internal Triangles (centroid raycast): {keybindings.get('remove_internal_triangles', 'i').upper()}",
+            f"Inspect Selected Triangle Internal?: {keybindings.get('inspect_internal_triangle', 'k').upper()}",
             f"Remove Internal Edges (raycast): {keybindings.get('remove_internal_edges', 'f12').upper()} or F12",
             f"Remove Triangles Covered by Others: {keybindings.get('remove_covered', 'f4').upper()} or F4",
             f"Show Triangles Using Selected Positions: {keybindings.get('show_position_matches', 'f2').upper()} or F2",
@@ -710,3 +782,106 @@ class UIOverlayCreator:
     def draw_disambiguation_panel(self):
         # Deprecated: replaced by colored triangle overlays
         return
+
+    def _draw_internal_triangle_inspector_panel(self):
+        """Right-side panel showing failing direction hit counts for the last inspected triangle."""
+        try:
+            lines = list(getattr(self.game, 'internal_triangle_debug_lines', []))
+            tri = getattr(self.game, 'internal_triangle_debug_triangle', None)
+            if not lines:
+                return
+            panel_w = 320
+            row_h = 20
+            max_rows = min(18, len(lines))
+            panel_h = 34 + max_rows * row_h
+            panel_x = self.width - panel_w - 10
+            panel_y = 40
+            panel = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+            pygame.draw.rect(self.overlay, (20, 20, 20, 220), panel)
+            pygame.draw.rect(self.overlay, (255, 160, 0, 220), panel, 2)
+            title = f"Tri {tri} internal check (failures)" if tri is not None else "Triangle internal check (failures)"
+            title_surf = self.font.render(title, True, (255, 160, 0))
+            self.overlay.blit(title_surf, (panel_x + 10, panel_y + 8))
+            y = panel_y + 28
+            for i in range(max_rows):
+                surf = self.font.render(lines[i], True, (255, 255, 255))
+                self.overlay.blit(surf, (panel_x + 10, y))
+                y += row_h
+        except Exception:
+            pass
+
+    def _draw_triangle_selection_panel(self):
+        """Right-side panel listing currently selected triangles for quick active selection."""
+        try:
+            self.game.triangle_item_rects = []
+            tris = sorted(list(getattr(self.game, 'selected_triangles', set())))
+            if not tris:
+                # Small status indicator only
+                surf = self.font.render("Triangle Select: ON", True, (0, 255, 255))
+                self.overlay.blit(surf, (self.width - surf.get_width() - 10, 10))
+                return
+            panel_w = 360
+            row_h = 24
+            max_rows = min(10, len(tris))
+            panel_h = 34 + max_rows * (row_h + 4)
+            panel_x = self.width - panel_w - 10
+            panel_y = 40
+            panel = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+            pygame.draw.rect(self.overlay, (20, 20, 20, 200), panel)
+            pygame.draw.rect(self.overlay, (0, 200, 255, 220), panel, 2)
+            title = self.font.render("Selected Triangles (click to activate)", True, (0, 255, 255))
+            self.overlay.blit(title, (panel_x + 10, panel_y + 8))
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            active = getattr(self.game, 'last_selected_triangle_index', None)
+            y = panel_y + 30
+            for idx, t in enumerate(tris[:max_rows]):
+                i0 = int(t) * 3
+                verts = (i0, i0 + 1, i0 + 2)
+                label = f"Tri {t}: v{verts[0]}, v{verts[1]}, v{verts[2]}"
+                selected = (active is not None and int(active) == int(t))
+                row_rect = pygame.Rect(panel_x + 6, y, panel_w - 12, row_h)
+                pygame.draw.rect(self.overlay, (0, 120, 160) if selected else (45, 45, 45), row_rect)
+                pygame.draw.rect(self.overlay, (90, 90, 90), row_rect, 1)
+                txt = self.font.render(label, True, (255, 255, 255))
+                self.overlay.blit(txt, (row_rect.left + 6, row_rect.top + 4))
+                self.game.triangle_item_rects.append((int(t), row_rect))
+                y += row_h + 4
+            hint = "Ctrl+click to multi-select"
+            hint_surf = self.font.render(hint, True, (180, 180, 180))
+            self.overlay.blit(hint_surf, (panel_x + 10, panel.bottom - 22))
+        except Exception:
+            self.game.triangle_item_rects = []
+
+    def _draw_disambiguation_triangle_panel(self):
+        """Clickable list of triangle candidates while disambiguating triangles."""
+        try:
+            self.game.disambiguation_item_rects = []
+            candidates = list(getattr(self.game, 'disambiguation_candidates', []))
+            if not candidates:
+                return
+            panel_w = 360
+            row_h = 24
+            max_rows = min(9, len(candidates))
+            panel_h = 40 + max_rows * (row_h + 4)
+            panel_x = self.width - panel_w - 10
+            panel_y = 40
+            panel = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+            pygame.draw.rect(self.overlay, (20, 20, 20, 220), panel)
+            pygame.draw.rect(self.overlay, (255, 255, 255, 220), panel, 2)
+            title = self.font.render("Choose Triangle (click row / 1-9 / Enter)", True, (255, 255, 255))
+            self.overlay.blit(title, (panel_x + 10, panel_y + 10))
+            selected_idx = int(getattr(self.game, 'disambiguation_selected', 0))
+            y = panel_y + 34
+            for i, t in enumerate(candidates[:max_rows]):
+                row_rect = pygame.Rect(panel_x + 6, y, panel_w - 12, row_h)
+                is_sel = (i == selected_idx)
+                pygame.draw.rect(self.overlay, (80, 80, 120) if is_sel else (45, 45, 45), row_rect)
+                pygame.draw.rect(self.overlay, (110, 110, 110), row_rect, 1)
+                i0 = int(t) * 3
+                label = f"{i+1}. Tri {t}: v{i0}, v{i0+1}, v{i0+2}"
+                txt = self.font.render(label, True, (255, 255, 255))
+                self.overlay.blit(txt, (row_rect.left + 6, row_rect.top + 4))
+                self.game.disambiguation_item_rects.append((int(t), row_rect))
+                y += row_h + 4
+        except Exception:
+            self.game.disambiguation_item_rects = []

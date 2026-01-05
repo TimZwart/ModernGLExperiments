@@ -19,3 +19,5 @@ class DeselectController:
             self.game.set_status("All vertices deselected", 120)
         except Exception as e:
             print(f"Error deselecting vertices: {e}")
+
+

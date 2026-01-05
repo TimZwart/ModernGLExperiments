@@ -90,6 +90,7 @@ class SelectionController:
     def start_disambiguation(self, candidates: list, ctrl_pressed: bool):
         try:
             self.game.disambiguation_mode = True
+            self.game.disambiguation_kind = 'vertex'
             self.game.disambiguation_candidates = list(candidates)
             self.game.disambiguation_selected = 0
             self.game.disambiguation_item_rects = []
@@ -145,11 +146,148 @@ class SelectionController:
                 ti = int(ov['triangle_index'])
                 j0 = ti * 3
                 highlight_indices.update([j0, j0 + 1, j0 + 2])
+            # Use yellow_highlights for this legacy vertex-disambiguation flow
             self.game.yellow_highlights = highlight_indices
             self.game.set_status("Click a highlighted triangle to choose the vertex", 240)
         except Exception:
             if candidates:
                 self.end_disambiguation(candidates[0])
+
+    def _triangle_vertex_indices(self, triangle_index: int) -> list[int]:
+        t = int(triangle_index)
+        return [t * 3 + 0, t * 3 + 1, t * 3 + 2]
+
+    def _rebuild_triangle_highlights_from_selection(self):
+        try:
+            hl = set()
+            for t in getattr(self.game, 'selected_triangles', set()):
+                hl.update(self._triangle_vertex_indices(int(t)))
+            self.game.triangle_highlights = hl
+        except Exception:
+            self.game.triangle_highlights = set()
+
+    def select_triangle(self, triangle_index: int, ctrl_pressed: bool):
+        """Select/toggle a triangle (by triangle index), updating highlights and active triangle."""
+        try:
+            t = int(triangle_index)
+            if ctrl_pressed:
+                if t in self.game.selected_triangles:
+                    self.game.selected_triangles.remove(t)
+                else:
+                    self.game.selected_triangles.add(t)
+            else:
+                self.game.selected_triangles = {t}
+            self.game.last_selected_triangle_index = t if self.game.selected_triangles else None
+            self._rebuild_triangle_highlights_from_selection()
+        except Exception:
+            pass
+
+    def start_triangle_disambiguation(self, triangle_candidates: list, ctrl_pressed: bool):
+        """Start modal disambiguation for overlapping triangles under the cursor."""
+        try:
+            self.game.disambiguation_mode = True
+            self.game.disambiguation_kind = 'triangle'
+            self.game.disambiguation_candidates = [int(t) for t in triangle_candidates]
+            self.game.disambiguation_selected = 0
+            self.game.disambiguation_item_rects = []
+            self.game.disambiguation_ctrl_pressed = bool(ctrl_pressed)
+            # Snapshot prior triangle selection and intended action
+            self.game.disambiguation_prev_selection = set(getattr(self.game, 'selected_triangles', set()))
+            self.game.disambiguation_action = 'toggle' if ctrl_pressed else 'replace'
+
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            colors = [
+                (0, 0, 255, 110),   # blue
+                (255, 0, 0, 110),   # red
+                (0, 255, 0, 110),   # green
+                (255, 255, 0, 110), # yellow
+                (255, 0, 255, 110), # magenta
+                (0, 255, 255, 110), # cyan
+                (255, 128, 0, 110), # orange
+                (128, 0, 255, 110), # purple
+                (128, 128, 128, 110), # gray
+            ]
+            overlays = []
+            color_index = 0
+            time = pygame.time.get_ticks() * 0.001
+            mvp = self.game.renderer.renderer3D.get_mvp_matrix(time)
+            for t in self.game.disambiguation_candidates:
+                tri_indices = self._triangle_vertex_indices(t)
+                if (max(tri_indices) >= len(rows)) or (min(tri_indices) < 0):
+                    continue
+                pos = rows[tri_indices, :3]
+                pts = self.game.renderer.renderer3D.world_to_screen(pos)
+                ones = np.ones((pos.shape[0], 1), dtype=float)
+                homo = np.concatenate([pos, ones], axis=1)
+                clip = homo.dot(np.array(mvp))
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    ndc = clip[:, :3] / clip[:, 3:4]
+                ndc_z = ndc[:, 2].astype(float)
+                if np.isnan(pts).any() or np.isnan(ndc_z).any():
+                    continue
+                color = colors[color_index % len(colors)]
+                color_index += 1
+                overlays.append({
+                    'candidate': int(t),
+                    'triangle_index': int(t),
+                    'screen_pts': [(float(pts[0][0]), float(pts[0][1])), (float(pts[1][0]), float(pts[1][1])), (float(pts[2][0]), float(pts[2][1]))],
+                    'ndc_z': [float(ndc_z[0]), float(ndc_z[1]), float(ndc_z[2])],
+                    'color': color,
+                })
+            self.game.disambiguation_triangles = overlays
+
+            # Highlight all involved vertices in the vertex list and on-screen markers.
+            hl = set()
+            for t in self.game.disambiguation_candidates:
+                hl.update(self._triangle_vertex_indices(int(t)))
+            self.game.triangle_highlights = hl
+
+            self.game.set_status("Click a colored triangle (or its row) to choose it", 240)
+        except Exception:
+            # Best-effort fallback: pick first candidate
+            if triangle_candidates:
+                self.end_disambiguation(int(triangle_candidates[0]))
+
+    def find_triangles_under_cursor(self, x: float, y: float) -> list[dict]:
+        """Return triangles under screen point (x,y), sorted front-to-back by interpolated ndc z."""
+        hits = []
+        if verticesHolder.vertices.size == 0:
+            return hits
+        try:
+            rows = verticesHolder.vertices.reshape(-1, 6)
+            tri_count = len(rows) // 3
+            p = (float(x), float(y))
+            time = pygame.time.get_ticks() * 0.001
+            mvp = self.game.renderer.renderer3D.get_mvp_matrix(time)
+            for t in range(tri_count):
+                tri_indices = self._triangle_vertex_indices(t)
+                pos = rows[tri_indices, :3]
+                pts = self.game.renderer.renderer3D.world_to_screen(pos)
+                ones = np.ones((pos.shape[0], 1), dtype=float)
+                homo = np.concatenate([pos, ones], axis=1)
+                clip = homo.dot(np.array(mvp))
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    ndc = clip[:, :3] / clip[:, 3:4]
+                ndc_z = ndc[:, 2].astype(float)
+                if np.isnan(pts).any() or np.isnan(ndc_z).any():
+                    continue
+                a = (float(pts[0][0]), float(pts[0][1]))
+                b = (float(pts[1][0]), float(pts[1][1]))
+                c = (float(pts[2][0]), float(pts[2][1]))
+                if not self.point_in_triangle(p, a, b, c):
+                    continue
+                w0, w1, w2 = self.barycentric_weights(p, a, b, c)
+                depth = float(w0 * ndc_z[0] + w1 * ndc_z[1] + w2 * ndc_z[2])
+                hits.append({
+                    'triangle_index': int(t),
+                    'depth': depth,
+                    'screen_pts': [a, b, c],
+                    'ndc_z': [float(ndc_z[0]), float(ndc_z[1]), float(ndc_z[2])],
+                })
+            hits.sort(key=lambda h: h.get('depth', 0.0))
+        except Exception:
+            return []
+        return hits
 
     def end_disambiguation(self, chosen_index):
         try:
@@ -157,25 +295,42 @@ class SelectionController:
             self.game.disambiguation_item_rects = []
             self.game.disambiguation_ctrl_pressed = False
             self.game.disambiguation_triangles = []
+            kind = getattr(self.game, 'disambiguation_kind', 'vertex')
             prior = getattr(self.game, 'disambiguation_prev_selection', set())
             action = getattr(self.game, 'disambiguation_action', None)
+            # Clear legacy vertex yellow highlights; triangle highlights are maintained separately.
             self.game.yellow_highlights = set()
             if chosen_index is None:
                 self.game.set_status("Selection cancelled", 120)
                 return
-            self.game.selected_vertices = set(prior)
-            if action == 'toggle':
-                if chosen_index in self.game.selected_vertices:
-                    self.game.selected_vertices.remove(chosen_index)
+            if kind == 'triangle':
+                # Apply triangle selection
+                self.game.selected_triangles = set(prior)
+                t = int(chosen_index)
+                if action == 'toggle':
+                    if t in self.game.selected_triangles:
+                        self.game.selected_triangles.remove(t)
+                    else:
+                        self.game.selected_triangles.add(t)
                 else:
-                    self.game.selected_vertices.add(chosen_index)
+                    self.game.selected_triangles = {t}
+                self.game.last_selected_triangle_index = t if self.game.selected_triangles else None
+                self._rebuild_triangle_highlights_from_selection()
             else:
-                self.game.selected_vertices = {chosen_index}
-            self.game.last_selected_vertex_index = chosen_index
-            if len(self.game.selected_vertices) == 1:
-                self.game.edit_mode = True
-                if self.vertex_editor is not None:
-                    self.vertex_editor.prefill_edit_fields(chosen_index)
+                # Existing vertex selection behavior
+                self.game.selected_vertices = set(prior)
+                if action == 'toggle':
+                    if chosen_index in self.game.selected_vertices:
+                        self.game.selected_vertices.remove(chosen_index)
+                    else:
+                        self.game.selected_vertices.add(chosen_index)
+                else:
+                    self.game.selected_vertices = {chosen_index}
+                self.game.last_selected_vertex_index = chosen_index
+                if len(self.game.selected_vertices) == 1:
+                    self.game.edit_mode = True
+                    if self.vertex_editor is not None:
+                        self.vertex_editor.prefill_edit_fields(chosen_index)
         except Exception:
             pass
 

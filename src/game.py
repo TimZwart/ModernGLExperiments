@@ -12,6 +12,12 @@ class Game:
         self.relative_movement = relative_movement
         self.overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         self.selected_vertices = set()
+        # Triangle selection tool state (separate from vertex selection)
+        self.triangle_select_mode = False
+        self.selected_triangles = set()  # set[int] of triangle indices (0-based)
+        self.last_selected_triangle_index = None
+        self.triangle_highlights = set()  # set[int] vertex indices to highlight in the vertex list/screen
+        self.triangle_item_rects = []  # list of (triangle_index:int, rect:pygame.Rect) for click detection
         self.edit_mode = False
         self.edit_text = ""
         self.edit_rect = pygame.Rect(10, self.height - 35, 290, 30)
@@ -103,7 +109,9 @@ class Game:
 
         # Disambiguation (ambiguous vertex pick) modal state
         self.disambiguation_mode = False
-        self.disambiguation_candidates = []  # list[int] vertex indices
+        # Kind: 'vertex' (existing) or 'triangle' (triangle select tool)
+        self.disambiguation_kind = 'vertex'
+        self.disambiguation_candidates = []  # list[int] indices (vertex or triangle depending on kind)
         self.disambiguation_selected = 0
         self.disambiguation_item_rects = []
         self.disambiguation_ctrl_pressed = False
@@ -117,6 +125,11 @@ class Game:
         self.cleanup_position_overlays = []
         # Wireframe overlays for non-matching triangles during cleanup inspection
         self.cleanup_position_wireframes = []
+        # Debug overlays for internal-triangle inspection (centroid ray checks)
+        # Each entry: {'origin':[x,y,z], 'end':[x,y,z], 'hits':int, 'reason':str, 'color':(r,g,b,a)}
+        self.internal_triangle_debug_rays = []
+        self.internal_triangle_debug_triangle = None  # triangle index inspected
+        self.internal_triangle_debug_lines = []  # list[str] summary lines to show on-screen
         
         # Predefined colors (RGB values 0.0-1.0)
         self.predefined_colors = {
@@ -169,10 +182,13 @@ class Game:
             snapshot = {
                 'vertices': np.copy(verticesHolder.vertices),
                 'selected_vertices': set(self.selected_vertices),
+                'selected_triangles': set(self.selected_triangles),
                 'current_color': list(self.current_color) if isinstance(self.current_color, (list, tuple)) else self.current_color,
                 'scroll_offset': int(self.uiOverlayCreator.scroll_offset),
                 'yellow_highlights': set(self.yellow_highlights),
+                'triangle_highlights': set(self.triangle_highlights),
                 'last_selected_vertex_index': self.last_selected_vertex_index,
+                'last_selected_triangle_index': self.last_selected_triangle_index,
                 'reason': str(reason) if reason else "",
             }
             self._undo_stack.append(snapshot)
@@ -192,10 +208,13 @@ class Game:
             # Restore vertices and UI-related state
             verticesHolder.vertices = snapshot.get('vertices', np.array([], dtype='f4')).astype('f4')
             self.selected_vertices = snapshot.get('selected_vertices', set())
+            self.selected_triangles = snapshot.get('selected_triangles', set())
             self.current_color = snapshot.get('current_color', self.random_color())
             self.uiOverlayCreator.scroll_offset = int(snapshot.get('scroll_offset', 0))
             self.yellow_highlights = snapshot.get('yellow_highlights', set())
             self.last_selected_vertex_index = snapshot.get('last_selected_vertex_index', None)
+            self.triangle_highlights = snapshot.get('triangle_highlights', set())
+            self.last_selected_triangle_index = snapshot.get('last_selected_triangle_index', None)
 
             # Clear transient editing modes
             self.add_vertex_mode = False
@@ -206,6 +225,12 @@ class Game:
             self.extrude_mode = False
             self.extrude_text = ""
             self.extrude_error = ""
+            # Clear transient modal/tool UI state
+            self.disambiguation_mode = False
+            self.disambiguation_triangles = []
+            self.disambiguation_candidates = []
+            self.disambiguation_item_rects = []
+            self.triangle_item_rects = []
 
             # Update GPU buffer after restoration
             self.renderer.renderer3D.update_vertex_buffer()

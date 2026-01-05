@@ -67,4 +67,13 @@ if 'remove_covered' not in keybindings:
 # Default key to visualize triangles that use the same positions as selection (cleanup aid)
 if 'show_position_matches' not in keybindings:
     keybindings['show_position_matches'] = 'f2'
+# Default key for removing fully internal triangles (cleanup mode only)
+if 'remove_internal_triangles' not in keybindings:
+    keybindings['remove_internal_triangles'] = 'i'
+# Default key for inspecting whether the selected triangle is internal (cleanup mode only)
+if 'inspect_internal_triangle' not in keybindings:
+    keybindings['inspect_internal_triangle'] = 'k'
+# Default key for triangle selection tool (toggle on/off)
+if 'select_triangles' not in keybindings:
+    keybindings['select_triangles'] = 't'
 mouse_rotation_button = int(config['KEYBINDINGS'].get('mouse_rotation_button', '2'))

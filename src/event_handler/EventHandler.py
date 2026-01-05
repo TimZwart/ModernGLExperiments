@@ -9,6 +9,8 @@ import itertools
 from src.configuration.loadconfig import keybindings, mouse_rotation_button
 from src.event_handler.CoveredTriangleRemover import CoveredTriangleRemover
 from src.event_handler.InternalEdgeRemover import InternalEdgeRemover
+from src.event_handler.InternalTriangleRemover import InternalTriangleRemover
+from src.event_handler.InternalTriangleInspector import InternalTriangleInspector
 from src.event_handler.BackfaceTriangleFixer import BackfaceTriangleFixer
 from src.event_handler.EdgeExistenceChecker import EdgeExistenceChecker
 from src.event_handler.PositionMatchInspector import PositionMatchInspector
@@ -32,6 +34,8 @@ class EventHandler:
         self.triangle_filler = TriangleFiller(game)
         self.covered_triangle_remover = CoveredTriangleRemover()
         self.internal_edge_remover = InternalEdgeRemover()
+        self.internal_triangle_remover = InternalTriangleRemover()
+        self.internal_triangle_inspector = InternalTriangleInspector()
         self.backface_triangle_fixer = BackfaceTriangleFixer()
         self.edge_existence_checker = EdgeExistenceChecker()
         self.position_match_inspector = PositionMatchInspector()
@@ -110,9 +114,16 @@ class EventHandler:
                             self._end_disambiguation(idx)
                         continue
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    # Click inside one of the highlighted triangles; pick the closest at the click point
+                    # Click inside one of the highlighted triangles (or a list row in triangle mode);
+                    # pick the closest at the click point.
                     x, y = event.pos
                     try:
+                        # Triangle disambiguation: allow clicking the right-side list rows.
+                        if getattr(self.game, 'disambiguation_kind', 'vertex') == 'triangle':
+                            for t_idx, rect in getattr(self.game, 'disambiguation_item_rects', []):
+                                if rect.collidepoint(x, y):
+                                    self._end_disambiguation(int(t_idx))
+                                    raise StopIteration()
                         tris = getattr(self.game, 'disambiguation_triangles', [])
                         best = None
                         best_depth = None
@@ -129,6 +140,8 @@ class EventHandler:
                         if best is not None:
                             chosen_idx = int(best.get('candidate'))
                             self._end_disambiguation(chosen_idx)
+                    except StopIteration:
+                        pass
                     except Exception:
                         pass
                     continue
@@ -315,6 +328,32 @@ class EventHandler:
                         continue
                     if (('remove_internal_edges' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_internal_edges'])) or event.key == self.alternate_keys['remove_internal_edges']:
                         self.remove_internal_edges_via_raycasts()
+                        continue
+                    # Clear all vertices (cleanup-only)
+                    if 'clear_vertices' in keybindings and event.key == pygame.key.key_code(keybindings['clear_vertices']):
+                        self.clear_all_vertices()
+                        continue
+                    # Remove fully internal triangles (centroid raycast heuristic)
+                    if 'remove_internal_triangles' in keybindings and event.key == pygame.key.key_code(keybindings['remove_internal_triangles']):
+                        try:
+                            self.internal_triangle_remover.remove_internal_triangles_via_centroid_raycast(self.game)
+                        except Exception:
+                            pass
+                        continue
+                    # Inspect whether the selected triangle is internal; if not, visualize failing rays
+                    if 'inspect_internal_triangle' in keybindings and event.key == pygame.key.key_code(keybindings['inspect_internal_triangle']):
+                        try:
+                            self.internal_triangle_inspector.inspect_selected_triangle(self.game)
+                        except Exception:
+                            pass
+                        # Exit cleanup mode so the user can move the camera around while rays stay visible
+                        try:
+                            self.cleanup_mode_controller.toggle_cleanup_mode(
+                                preserve_internal_triangle_debug=True,
+                                keep_status=True
+                            )
+                        except Exception:
+                            pass
                         continue
                     if (('remove_covered' in keybindings) and event.key == pygame.key.key_code(keybindings['remove_covered'])) or event.key == self.alternate_keys['remove_covered']:
                         self.covered_triangle_remover.remove_fully_covered_triangles(self.game)
@@ -531,6 +570,29 @@ class EventHandler:
                         self.game.edit_focus = 'pos'
                     elif self.game.edit_mode and self.game.edit_color_rect and self.game.edit_color_rect.collidepoint(x, y):
                         self.game.edit_focus = 'color'
+                    elif getattr(self.game, 'triangle_select_mode', False) and self._handle_triangle_list_click(x, y, bool(ctrl_pressed)):
+                        # Clicked the triangle selection panel (right side)
+                        pass
+                    elif getattr(self.game, 'triangle_select_mode', False):
+                        # Triangle selection tool: click a triangle under the cursor.
+                        hits = []
+                        try:
+                            hits = self.selection_controller.find_triangles_under_cursor(x, y)
+                        except Exception:
+                            hits = []
+                        if not hits:
+                            if not ctrl_pressed:
+                                self.game.selected_triangles = set()
+                                self.game.last_selected_triangle_index = None
+                                self.game.triangle_highlights = set()
+                            continue
+                        if len(hits) > 1:
+                            tri_candidates = [h.get('triangle_index') for h in hits if h.get('triangle_index') is not None]
+                            self.selection_controller.start_triangle_disambiguation(tri_candidates, bool(ctrl_pressed))
+                            continue
+                        # Single triangle hit
+                        self.selection_controller.select_triangle(int(hits[0]['triangle_index']), bool(ctrl_pressed))
+                        continue
                     elif self.handle_vertex_list_click(x, y, ctrl_pressed):
                         pass # Vertex in the list was clicked, no need to do anything else
                     else:
@@ -589,6 +651,18 @@ class EventHandler:
                     continue
                 if event.key == pygame.key.key_code(keybindings.get('undo', 'z')):
                     self.game.undo_last_action()
+                    continue
+                # Toggle Triangle Select tool
+                if event.key == pygame.key.key_code(keybindings.get('select_triangles', 't')):
+                    self.game.triangle_select_mode = not getattr(self.game, 'triangle_select_mode', False)
+                    if self.game.triangle_select_mode:
+                        # Avoid accidental vertex edits while in triangle mode
+                        self.game.edit_mode = False
+                        self.game.add_vertex_mode = False
+                        self.game.set_status("Triangle Select: ON (click triangles; Ctrl+click multi-select)", 240)
+                    else:
+                        self.game.set_status("Triangle Select: OFF", 120)
+                        self.game.triangle_item_rects = []
                     continue
                 # Toggle shapes mode irrespective of other modes except text editing ones handled above
                 if event.key == pygame.key.key_code(keybindings.get('shapes_mode', 'm')):
@@ -689,7 +763,13 @@ class EventHandler:
                         self.delete_selected_vertices()
                     # Clear all vertices via configured key (e.g., X)
                     if 'clear_vertices' in keybindings and event.key == pygame.key.key_code(keybindings['clear_vertices']):
-                        self.clear_all_vertices()
+                        if getattr(self.game, 'cleanup_mode', False):
+                            self.clear_all_vertices()
+                        else:
+                            self.game.set_status(
+                                f"Clear All Vertices is available in Cleanup Mode. Toggle it with {keybindings.get('cleanup_mode','u').upper()}",
+                                240
+                            )
                     # Deselect all vertices via configured key (e.g., D)
                     if 'deselect_all' in keybindings and event.key == pygame.key.key_code(keybindings['deselect_all']):
                         self.deselect_controller.deselect_all_vertices()
@@ -1178,6 +1258,17 @@ class EventHandler:
 
     def handle_vertex_list_click(self, x, y, ctrl_pressed):
         return self.selection_controller.handle_vertex_list_click(x, y, ctrl_pressed)
+
+    def _handle_triangle_list_click(self, x, y, ctrl_pressed: bool) -> bool:
+        """Handle clicks on the triangle selection panel (right-side list)."""
+        try:
+            for t_idx, rect in getattr(self.game, 'triangle_item_rects', []):
+                if rect.collidepoint(x, y):
+                    self.selection_controller.select_triangle(int(t_idx), bool(ctrl_pressed))
+                    return True
+        except Exception:
+            pass
+        return False
 
     def handle_scroll(self, y):
         return self.selection_controller.handle_scroll(y)
