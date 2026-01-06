@@ -16,6 +16,80 @@ class UIOverlayCreator:
         self.font = pygame.font.Font(None, 24)
         self.scroll_offset = 0
         self.max_visible_vertices = 15
+        # Cache for internal-triangle debug origin occlusion test (to avoid doing heavy ray tests every frame)
+        self._internal_debug_occlusion = {
+            'last_time_ms': -1,
+            'last_eye': None,
+            'last_look': None,
+            'last_point': None,
+            'occluded': False,
+        }
+
+    def _ray_intersects_triangle_3d(self, origin, direction, v0, v1, v2, eps=1e-8):
+        # Möller–Trumbore intersection; returns (hit:bool, t:float|None)
+        edge1 = v1 - v0
+        edge2 = v2 - v0
+        pvec = np.cross(direction, edge2)
+        det = float(np.dot(edge1, pvec))
+        if -eps < det < eps:
+            return False, None
+        inv_det = 1.0 / det
+        tvec = origin - v0
+        u = float(np.dot(tvec, pvec) * inv_det)
+        if u < 0.0 - eps or u > 1.0 + eps:
+            return False, None
+        qvec = np.cross(tvec, edge1)
+        v = float(np.dot(direction, qvec) * inv_det)
+        if v < 0.0 - eps or u + v > 1.0 + eps:
+            return False, None
+        t = float(np.dot(edge2, qvec) * inv_det)
+        if t <= eps:
+            return False, None
+        return True, t
+
+    def _is_point_occluded_from_camera(self, world_point, max_age_ms: int = 200) -> bool:
+        """Return True if any triangle blocks the segment from the camera eye to world_point."""
+        try:
+            now = pygame.time.get_ticks()
+            eye = tuple(getattr(self.game.camera, 'eye', (0.0, 0.0, 0.0)))
+            look = tuple(getattr(self.game.camera, 'look_at', (0.0, 0.0, 0.0)))
+            pt = (float(world_point[0]), float(world_point[1]), float(world_point[2]))
+            cache = self._internal_debug_occlusion
+
+            if (cache['last_time_ms'] >= 0) and (now - cache['last_time_ms'] <= max_age_ms) and \
+               (cache['last_eye'] == eye) and (cache['last_look'] == look) and (cache['last_point'] == pt):
+                return bool(cache['occluded'])
+
+            cam = np.array(eye, dtype=np.float64)
+            p = np.array(pt, dtype=np.float64)
+            dv = p - cam
+            dist = float(np.linalg.norm(dv))
+            if dist <= 1e-9:
+                occluded = False
+            else:
+                d = dv / dist
+                rows = verticesHolder.vertices.reshape(-1, 6)
+                tri_count = len(rows) // 3
+                tri_rows = rows[:tri_count * 3]
+                tri_pos = tri_rows.reshape(tri_count, 3, 6)[:, :, :3].astype(np.float64)
+                occluded = False
+                # Early-out: any hit before reaching p means occluded
+                limit = dist - 1e-6
+                for t in range(tri_count):
+                    v0, v1, v2 = tri_pos[t]
+                    hit, tt = self._ray_intersects_triangle_3d(cam, d, v0, v1, v2)
+                    if hit and tt is not None and float(tt) < limit:
+                        occluded = True
+                        break
+
+            cache['last_time_ms'] = int(now)
+            cache['last_eye'] = eye
+            cache['last_look'] = look
+            cache['last_point'] = pt
+            cache['occluded'] = bool(occluded)
+            return bool(occluded)
+        except Exception:
+            return False
 
     def _pos_placeholder(self):
         return "[x, y, z]"
@@ -554,6 +628,18 @@ class UIOverlayCreator:
         if getattr(self.game, 'internal_triangle_debug_rays', []):
             try:
                 rays = list(getattr(self.game, 'internal_triangle_debug_rays', []))
+                # Determine whether the origin (triangle centroid) is occluded from the current camera view.
+                origin_world = None
+                try:
+                    if rays:
+                        origin_world = rays[0].get('origin', None)
+                except Exception:
+                    origin_world = None
+                origin_occluded = False
+                if origin_world is not None and isinstance(origin_world, (list, tuple)) and len(origin_world) == 3:
+                    origin_occluded = self._is_point_occluded_from_camera(origin_world)
+                origin_marker_color = (160, 160, 160, 230) if origin_occluded else (255, 0, 0, 230)
+
                 # Build a list of endpoints for projection (origin+end per ray)
                 pts3d = []
                 for r in rays:
@@ -572,11 +658,83 @@ class UIOverlayCreator:
                     color = r.get('color', (255, 0, 0, 220))
                     pygame.draw.line(self.overlay, color, (ax, ay), (bx, by), 2)
                     pygame.draw.circle(self.overlay, color, (int(bx), int(by)), 3)
+                    # Mark the ray origin with a tiny triangle (grey if occluded from camera POV, red otherwise)
+                    try:
+                        dx = bx - ax
+                        dy = by - ay
+                        n = (dx * dx + dy * dy) ** 0.5
+                        if n < 1e-6:
+                            ux, uy = 1.0, 0.0
+                        else:
+                            ux, uy = dx / n, dy / n
+                        px, py = -uy, ux
+                        size = 6.0
+                        tip = (ax + ux * size * 2.0, ay + uy * size * 2.0)
+                        base = (ax - ux * size * 0.8, ay - uy * size * 0.8)
+                        p1 = (base[0] + px * size * 0.9, base[1] + py * size * 0.9)
+                        p2 = (base[0] - px * size * 0.9, base[1] - py * size * 0.9)
+                        pygame.draw.polygon(self.overlay, origin_marker_color, [tip, p1, p2])
+                    except Exception:
+                        pass
                     hits = int(r.get('hits', 0))
                     di = int(r.get('dir_index', -1))
                     label = f"d{di:02d}:{hits}"
                     text = self.font.render(label, True, (255, 255, 255))
                     self.overlay.blit(text, (bx + 6, by + 2))
+            except Exception:
+                pass
+            # Highlight triangles that are closest to the missed rays (yellow edges)
+            try:
+                closest_tris = set(getattr(self.game, 'internal_triangle_debug_closest_triangles', set()))
+                if closest_tris:
+                    rows = verticesHolder.vertices.reshape(-1, 6)
+                    tri_count = len(rows) // 3
+                    pts3d = []
+                    tri_ids = []
+                    for t in sorted(list(closest_tris)):
+                        ti = int(t)
+                        if ti < 0 or ti >= tri_count:
+                            continue
+                        i0 = ti * 3
+                        pos = rows[[i0 + 0, i0 + 1, i0 + 2], :3]
+                        pts3d.append(pos[0].tolist())
+                        pts3d.append(pos[1].tolist())
+                        pts3d.append(pos[2].tolist())
+                        tri_ids.append(ti)
+                    if pts3d:
+                        pts3d = np.array(pts3d, dtype=float).reshape(-1, 3)
+                        pts2d = self.game.renderer.renderer3D.world_to_screen(pts3d)
+                        for i, ti in enumerate(tri_ids):
+                            p0 = pts2d[i * 3 + 0]
+                            p1 = pts2d[i * 3 + 1]
+                            p2 = pts2d[i * 3 + 2]
+                            x0, y0 = float(p0[0]), float(p0[1])
+                            x1, y1 = float(p1[0]), float(p1[1])
+                            x2, y2 = float(p2[0]), float(p2[1])
+                            if np.isnan(x0) or np.isnan(y0) or np.isnan(x1) or np.isnan(y1) or np.isnan(x2) or np.isnan(y2):
+                                continue
+                            pygame.draw.polygon(self.overlay, (255, 255, 0, 230), [(x0, y0), (x1, y1), (x2, y2)], 3)
+            except Exception:
+                pass
+            # Draw closest-point pairs (green on triangle, red on ray) for each missed ray
+            try:
+                pairs = list(getattr(self.game, 'internal_triangle_debug_closest_points', []))
+                if pairs:
+                    pts3d = []
+                    for p in pairs:
+                        pts3d.append(p.get('pt_tri', [0.0, 0.0, 0.0]))
+                        pts3d.append(p.get('pt_ray', [0.0, 0.0, 0.0]))
+                    pts3d = np.array(pts3d, dtype=float).reshape(-1, 3)
+                    pts2d = self.game.renderer.renderer3D.world_to_screen(pts3d)
+                    for i in range(len(pairs)):
+                        tri_pt = pts2d[i * 2 + 0]
+                        ray_pt = pts2d[i * 2 + 1]
+                        tx, ty = float(tri_pt[0]), float(tri_pt[1])
+                        rx, ry = float(ray_pt[0]), float(ray_pt[1])
+                        if not (np.isnan(tx) or np.isnan(ty)):
+                            pygame.draw.circle(self.overlay, (255, 255, 0, 230), (int(tx), int(ty)), 5)
+                        if not (np.isnan(rx) or np.isnan(ry)):
+                            pygame.draw.circle(self.overlay, (255, 0, 0, 230), (int(rx), int(ry)), 5)
             except Exception:
                 pass
             self._draw_internal_triangle_inspector_panel()

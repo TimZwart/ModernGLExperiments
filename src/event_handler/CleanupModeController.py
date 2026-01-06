@@ -26,6 +26,8 @@ class CleanupModeController:
             entering = bool(self.game.cleanup_mode)
             if entering or (not preserve_internal_triangle_debug):
                 self.game.internal_triangle_debug_rays = []
+                self.game.internal_triangle_debug_closest_points = []
+                self.game.internal_triangle_debug_closest_triangles = set()
                 self.game.internal_triangle_debug_triangle = None
                 self.game.internal_triangle_debug_lines = []
         except Exception:

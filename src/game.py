@@ -128,6 +128,11 @@ class Game:
         # Debug overlays for internal-triangle inspection (centroid ray checks)
         # Each entry: {'origin':[x,y,z], 'end':[x,y,z], 'hits':int, 'reason':str, 'color':(r,g,b,a)}
         self.internal_triangle_debug_rays = []
+        # Closest approach visualization for missed rays:
+        # list of {'ray_dir_index':int,'closest_triangle':int,'pt_ray':[x,y,z],'pt_tri':[x,y,z],'distance':float}
+        self.internal_triangle_debug_closest_points = []
+        # Set[int] of triangle indices highlighted as closest-to-missed-ray (draw yellow edges)
+        self.internal_triangle_debug_closest_triangles = set()
         self.internal_triangle_debug_triangle = None  # triangle index inspected
         self.internal_triangle_debug_lines = []  # list[str] summary lines to show on-screen
         
