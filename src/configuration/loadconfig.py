@@ -73,6 +73,12 @@ if 'remove_internal_triangles' not in keybindings:
 # Default key for inspecting whether the selected triangle is internal (cleanup mode only)
 if 'inspect_internal_triangle' not in keybindings:
     keybindings['inspect_internal_triangle'] = 'k'
+# Default key for checking whether 3 selected vertex positions form an existing triangle
+if 'check_triangle_positions' not in keybindings:
+    keybindings['check_triangle_positions'] = 'p'
+# Default key to open View Mode (select rendering views)
+if 'view_mode' not in keybindings:
+    keybindings['view_mode'] = 'v'
 # Default key for triangle selection tool (toggle on/off)
 if 'select_triangles' not in keybindings:
     keybindings['select_triangles'] = 't'

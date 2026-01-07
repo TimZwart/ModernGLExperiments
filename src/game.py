@@ -64,6 +64,11 @@ class Game:
         self.scroll_speed = 3
         self.yellow_highlights = set()
         self.help_mode = False
+        # View Mode (rendering views) state
+        self.view_mode = False
+        self.view_mode_selected = 0
+        self.view_mode_item_rects = []  # list of (item_id:str, rect:pygame.Rect)
+        self.active_view = 'normal'  # 'normal' | 'distance_fade'
         # Transient status message shown on-screen (text, frames_remaining)
         self.status_message = ("", 0)
         # Remember the last vertex index the user interacted with

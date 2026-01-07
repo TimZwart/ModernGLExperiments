@@ -23,11 +23,16 @@ class Renderer3D:
         self.height = height
         self.camera = camera
         self.wireframe = False
+        # View mode: 0 normal, 1 distance-fade
+        self.view_mode = 0
 
         # Initialize uniform locations, checking if they exist
         self.mvp = self.prog['mvp']
         self.model = self.prog['model'] if 'model' in self.prog else None
         self.eye_position = self.prog['eye_position'] if 'eye_position' in self.prog else None
+        self.view_mode_u = self.prog['view_mode'] if 'view_mode' in self.prog else None
+        self.min_mesh_distance_u = self.prog['min_mesh_distance'] if 'min_mesh_distance' in self.prog else None
+        self.max_mesh_distance_u = self.prog['max_mesh_distance'] if 'max_mesh_distance' in self.prog else None
         # Mild depth bias to reduce z-fighting between near-coplanar triangles (set per frame)
         self.depth_bias = (1.0, 1.0)
 
@@ -64,6 +69,35 @@ class Renderer3D:
             # Convert the eye position to a numpy array and then to float32
             eye_pos = np.array(self.camera.eye, dtype='f4')
             self.eye_position.write(eye_pos)
+
+        # View-specific uniforms (distance fade)
+        if self.view_mode_u is not None:
+            try:
+                self.view_mode_u.value = int(getattr(self, 'view_mode', 0))
+            except Exception:
+                pass
+        if int(getattr(self, 'view_mode', 0)) == 1 and (self.min_mesh_distance_u is not None) and (self.max_mesh_distance_u is not None):
+            try:
+                if verticesHolder.vertices.size:
+                    rows = verticesHolder.vertices.reshape(-1, 6)
+                    pos = rows[:, :3].astype(np.float64)
+                    eye = np.array(self.camera.eye, dtype=np.float64).reshape(1, 3)
+                    d = np.linalg.norm(pos - eye, axis=1)
+                    min_d = float(np.min(d)) if d.size else 0.0
+                    max_d = float(np.max(d)) if d.size else (min_d + 1.0)
+                else:
+                    min_d, max_d = 0.0, 1.0
+                # Avoid degenerate range
+                if max_d - min_d < 1e-6:
+                    max_d = min_d + 1.0
+                self.min_mesh_distance_u.value = float(min_d)
+                self.max_mesh_distance_u.value = float(max_d)
+            except Exception:
+                try:
+                    self.min_mesh_distance_u.value = 0.0
+                    self.max_mesh_distance_u.value = 1.0
+                except Exception:
+                    pass
         
         current_vertex_count = len(verticesHolder.vertices) // 6
         if current_vertex_count > 0:

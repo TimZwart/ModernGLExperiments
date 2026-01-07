@@ -204,6 +204,10 @@ class UIOverlayCreator:
             else:
                 self.draw_help_screen()
             return
+        # View Mode modal overlay
+        if getattr(self.game, 'view_mode', False):
+            self.draw_view_mode_screen()
+            return
         # Render text on the overlay
         debug_text = self.font.render(f"Vertices count: {len(verticesHolder.vertices) // 6}", True, (255, 0, 0))
         self.overlay.blit(debug_text, (10, 10))
@@ -790,12 +794,13 @@ class UIOverlayCreator:
             f"Open File: {keybindings.get('open_file', 'b').upper()} or F3",
             f"Fill with triangles between selected points: {keybindings['form_triangles'].upper()} or F7",
             f"Triangle Select Tool: {keybindings.get('select_triangles', 't').upper()} (click triangles; Ctrl+click multi-select)",
+            f"Check Triangle Exists (3 selected positions): {keybindings.get('check_triangle_positions', 'p').upper()}",
+            f"View Mode: {keybindings.get('view_mode', 'v').upper()} (choose views, wireframe, distance fade)",
             f"Extrude selected: {keybindings.get('extrude', 'e').upper()} (enter P' [x, y, z])",
             f"Yaw Left: {keybindings['yaw_left'].upper()} or Numpad 4",
             f"Yaw Right: {keybindings['yaw_right'].upper()} or Numpad 6",
             f"Pitch Up: {keybindings['pitch_up'].upper()} or Numpad 8",
             f"Pitch Down: {keybindings['pitch_down'].upper()} or Numpad 2",
-            f"Toggle Wireframe: {keybindings['toggle_wireframe'].upper()} or F8",
             f"Undo last action: Ctrl+Z or {keybindings.get('undo', 'z').upper()}",
             f"Color Picker: {keybindings.get('color_picker', 'c').upper()} (predefined colors)",
             f"Help: {keybindings['help'].upper()} or F1",
@@ -864,6 +869,63 @@ class UIOverlayCreator:
             surf = font.render(text, True, (255, 255, 255))
             self.overlay.blit(surf, (20, y))
             y += 30
+
+    def draw_view_mode_screen(self):
+        """Modal overlay for choosing render views and toggling wireframe."""
+        try:
+            # Dim background
+            dim = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+            dim.fill((0, 0, 0, 160))
+            self.overlay.blit(dim, (0, 0))
+
+            panel_w = 520
+            row_h = 30
+            items = [
+                ("view_normal", "View: Normal"),
+                ("view_distance_fade", "View: Distance Fade (colors fade with distance)"),
+                ("toggle_wireframe", f"Wireframe: {'ON' if getattr(self.game.renderer.renderer3D, 'wireframe', False) else 'OFF'}"),
+            ]
+            panel_h = 60 + len(items) * row_h + 50
+            panel_x = (self.width - panel_w) // 2
+            panel_y = (self.height - panel_h) // 2
+            panel = pygame.Rect(panel_x, panel_y, panel_w, panel_h)
+            pygame.draw.rect(self.overlay, (30, 30, 30), panel)
+            pygame.draw.rect(self.overlay, (200, 200, 200), panel, 2)
+
+            title = "View Mode (Up/Down, Enter to apply, F8 toggles wireframe, Esc to close)"
+            title_surf = self.font.render(title, True, (255, 255, 255))
+            self.overlay.blit(title_surf, (panel_x + 10, panel_y + 10))
+
+            self.game.view_mode_item_rects = []
+            selected = int(getattr(self.game, 'view_mode_selected', 0))
+            y = panel_y + 40
+            for idx, (item_id, label) in enumerate(items):
+                is_sel = (idx == selected)
+                row = pygame.Rect(panel_x + 10, y, panel_w - 20, row_h - 2)
+                pygame.draw.rect(self.overlay, (0, 100, 200) if is_sel else (60, 60, 60), row)
+                pygame.draw.rect(self.overlay, (120, 120, 120), row, 1)
+
+                # Mark active view
+                prefix = ""
+                try:
+                    active_view = getattr(self.game, 'active_view', 'normal')
+                    if item_id == "view_normal" and active_view == "normal":
+                        prefix = "✓ "
+                    if item_id == "view_distance_fade" and active_view == "distance_fade":
+                        prefix = "✓ "
+                except Exception:
+                    pass
+
+                text = self.font.render(prefix + label, True, (255, 255, 255))
+                self.overlay.blit(text, (row.left + 8, row.top + 6))
+                self.game.view_mode_item_rects.append((item_id, row))
+                y += row_h
+
+            hint = f"Press {keybindings.get('view_mode','v').upper()} to toggle View Mode"
+            hint_surf = self.font.render(hint, True, (200, 200, 200))
+            self.overlay.blit(hint_surf, (panel_x + 10, panel.bottom - 30))
+        except Exception:
+            self.game.view_mode_item_rects = []
     
     def draw_color_picker(self):
         """Draw the color picker modal overlay with predefined colors."""

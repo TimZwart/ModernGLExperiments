@@ -14,6 +14,7 @@ from src.event_handler.InternalTriangleInspector import InternalTriangleInspecto
 from src.event_handler.BackfaceTriangleFixer import BackfaceTriangleFixer
 from src.event_handler.EdgeExistenceChecker import EdgeExistenceChecker
 from src.event_handler.PositionMatchInspector import PositionMatchInspector
+from src.event_handler.TrianglePositionChecker import TrianglePositionChecker
 from src.event_handler.SelectionController import SelectionController
 from src.event_handler.VertexEditController import VertexEditController
 from src.event_handler.ShapesController import ShapesController
@@ -39,6 +40,7 @@ class EventHandler:
         self.backface_triangle_fixer = BackfaceTriangleFixer()
         self.edge_existence_checker = EdgeExistenceChecker()
         self.position_match_inspector = PositionMatchInspector()
+        self.triangle_position_checker = TrianglePositionChecker()
         self.vertex_editor = VertexEditController(game)
         self.selection_controller = SelectionController(game, vertex_editor=self.vertex_editor)
         self.shapes_controller = ShapesController(game, clear_rotation_state=self._clear_rotation_state)
@@ -252,6 +254,100 @@ class EventHandler:
                         pass
                 # Swallow all other events while color picker is open
                 continue
+            # Modal: View Mode (render views) has precedence over other inputs except QUIT
+            if getattr(self.game, 'view_mode', False):
+                if event.type == pygame.QUIT:
+                    continue_running = False
+                    continue
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE or event.key == pygame.key.key_code(keybindings.get('view_mode', 'v')):
+                        self.game.view_mode = False
+                        continue
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        try:
+                            self.game.view_mode_selected = max(0, int(self.game.view_mode_selected) - 1)
+                        except Exception:
+                            self.game.view_mode_selected = 0
+                        continue
+                    if event.key in (pygame.K_DOWN, pygame.K_s):
+                        try:
+                            self.game.view_mode_selected = min(2, int(self.game.view_mode_selected) + 1)
+                        except Exception:
+                            self.game.view_mode_selected = 0
+                        continue
+                    # Wireframe toggle moved here
+                    if (event.key == pygame.key.key_code(keybindings['toggle_wireframe'])) or (event.key == self.alternate_keys['toggle_wireframe']):
+                        try:
+                            self.game.renderer.renderer3D.toggle_wireframe()
+                        except Exception:
+                            pass
+                        continue
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        sel = int(getattr(self.game, 'view_mode_selected', 0))
+                        if sel == 0:
+                            self.game.active_view = 'normal'
+                            try:
+                                self.game.renderer.renderer3D.view_mode = 0
+                            except Exception:
+                                pass
+                        elif sel == 1:
+                            self.game.active_view = 'distance_fade'
+                            try:
+                                self.game.renderer.renderer3D.view_mode = 1
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                self.game.renderer.renderer3D.toggle_wireframe()
+                            except Exception:
+                                pass
+                        self.game.view_mode = False
+                        continue
+                    # Number keys 1..3 choose directly
+                    if pygame.K_1 <= event.key <= pygame.K_3:
+                        choice = event.key - pygame.K_1
+                        self.game.view_mode_selected = int(choice)
+                        # Apply immediately
+                        if choice == 0:
+                            self.game.active_view = 'normal'
+                            try:
+                                self.game.renderer.renderer3D.view_mode = 0
+                            except Exception:
+                                pass
+                        elif choice == 1:
+                            self.game.active_view = 'distance_fade'
+                            try:
+                                self.game.renderer.renderer3D.view_mode = 1
+                            except Exception:
+                                pass
+                        else:
+                            try:
+                                self.game.renderer.renderer3D.toggle_wireframe()
+                            except Exception:
+                                pass
+                        self.game.view_mode = False
+                        continue
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    x, y = event.pos
+                    try:
+                        for idx, (item_id, rect) in enumerate(getattr(self.game, 'view_mode_item_rects', [])):
+                            if rect.collidepoint(x, y):
+                                self.game.view_mode_selected = int(idx)
+                                if item_id == 'view_normal':
+                                    self.game.active_view = 'normal'
+                                    self.game.renderer.renderer3D.view_mode = 0
+                                elif item_id == 'view_distance_fade':
+                                    self.game.active_view = 'distance_fade'
+                                    self.game.renderer.renderer3D.view_mode = 1
+                                elif item_id == 'toggle_wireframe':
+                                    self.game.renderer.renderer3D.toggle_wireframe()
+                                self.game.view_mode = False
+                                break
+                    except Exception:
+                        pass
+                    continue
+                # Swallow all other events while in view mode
+                continue
             # Modal: Shapes input flows have precedence over other inputs except QUIT
             if getattr(self.game, 'shapes_mode', False) and getattr(self.game, 'shape_input_mode', None) is not None:
                 if event.type == pygame.QUIT:
@@ -360,6 +456,14 @@ class EventHandler:
                         continue
                     if (('show_position_matches' in keybindings) and event.key == pygame.key.key_code(keybindings['show_position_matches'])) or event.key == self.alternate_keys['show_position_matches']:
                         self.show_triangles_matching_selected_positions()
+                        continue
+                    # Triangle-by-position check is a main-mode tool, but cleanup mode swallows keys,
+                    # so allow it here as well for convenience.
+                    if 'check_triangle_positions' in keybindings and event.key == pygame.key.key_code(keybindings['check_triangle_positions']):
+                        try:
+                            self.triangle_position_checker.check_selected_vertices_form_triangle(self.game)
+                        except Exception:
+                            pass
                         continue
                 # Swallow all other events while in cleanup mode
                 continue
@@ -652,6 +756,19 @@ class EventHandler:
                 if event.key == pygame.key.key_code(keybindings.get('undo', 'z')):
                     self.game.undo_last_action()
                     continue
+                # Toggle View Mode
+                if event.key == pygame.key.key_code(keybindings.get('view_mode', 'v')):
+                    # Avoid opening over other modals/modes
+                    if getattr(self.game, 'cleanup_mode', False):
+                        self.game.set_status("Exit Cleanup Mode to use View Mode", 180)
+                    elif getattr(self.game, 'shapes_mode', False):
+                        self.game.set_status("Exit Shapes Mode to use View Mode", 180)
+                    else:
+                        self.game.view_mode = not getattr(self.game, 'view_mode', False)
+                        if self.game.view_mode:
+                            # Default selection: current view
+                            self.game.view_mode_selected = 0 if getattr(self.game, 'active_view', 'normal') == 'normal' else 1
+                    continue
                 # Toggle Triangle Select tool
                 if event.key == pygame.key.key_code(keybindings.get('select_triangles', 't')):
                     self.game.triangle_select_mode = not getattr(self.game, 'triangle_select_mode', False)
@@ -773,6 +890,12 @@ class EventHandler:
                     # Deselect all vertices via configured key (e.g., D)
                     if 'deselect_all' in keybindings and event.key == pygame.key.key_code(keybindings['deselect_all']):
                         self.deselect_controller.deselect_all_vertices()
+                    # Check whether 3 selected vertex positions form an existing triangle (main mode tool)
+                    if 'check_triangle_positions' in keybindings and event.key == pygame.key.key_code(keybindings['check_triangle_positions']):
+                        try:
+                            self.triangle_position_checker.check_selected_vertices_form_triangle(self.game)
+                        except Exception:
+                            pass
                 # Press-and-hold keyboard rotate key acts like holding the mouse rotation button
                 # Do not engage rotate when in shapes mode to allow key reuse (e.g., 'r' for Rectangle)
                 if 'rotate' in keybindings and event.key == pygame.key.key_code(keybindings['rotate']):
@@ -918,9 +1041,8 @@ class EventHandler:
                         continue
                     self.game.camera.pitch(-self.rotation_speed)
                 if event.key == pygame.key.key_code(keybindings['toggle_wireframe']) or event.key == self.alternate_keys['toggle_wireframe']:
-                    if getattr(self.game, 'cleanup_mode', False):
-                        continue
-                    self.game.renderer.renderer3D.toggle_wireframe()
+                    # Wireframe toggle is View Mode only; ignore in main mode.
+                    continue
                 if event.key == pygame.key.key_code(keybindings['help']) or event.key == self.alternate_keys['help']:
                     self.game.help_mode = not self.game.help_mode
                 # Toggle color picker
